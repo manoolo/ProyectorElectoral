@@ -16,7 +16,7 @@ PAISES = {
     "ar": dict(load=lambda: __import__("adapters.ar", fromlist=["x"]).pair(2015, 2019),
                groups=["peronismo", "jxc", "otros"], rule="argentina", title="Argentina 2019",
                names={"peronismo": "Fernández", "jxc": "Macri", "otros": "Otros"},
-               colors={"Fernández": "#2a8fd6", "Macri": "#e0b21b", "Otros": "#8a8f98"},
+               colors={"Fernández": "#1e7fc8", "Macri": "#c99400", "Otros": "#8a8f98"},
                sub="Reproduce el escrutinio provisorio de 2019 circuito por circuito, con la base 2015, en un orden de llegada simulado con sesgo. Mové el control para ver qué decía la proyección en cada momento.",
                truth_text="Resultado real: Fernández ganó en primera vuelta con 48,2%."),
     # balotaje: base = 1ª vuelta, objetivo = 2ª vuelta del mismo año (lo que importa para 2026)
