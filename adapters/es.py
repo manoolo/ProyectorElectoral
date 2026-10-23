@@ -1,12 +1,13 @@
 """España: arma la base canónica (Congreso) por municipio con los ficheros del Ministerio del Interior.
 
-Fuente: infoelectoral.interior.gob.es → Área de descargas → Congreso → "Municipios" (zip con
-ficheros .DAT de ancho fijo, latin-1). Lo que se usa:
+Fuente: infoelectoral.interior.gob.es → Área de descargas → Congreso → "Municipios" o "Mesas" (zip
+con ficheros .DAT de ancho fijo, latin-1). Lo que se usa:
   03xxaamm.DAT  candidaturas: código (pos. 9-14), siglas (15-64), denominación (65-214)
   05xxaamm.DAT  datos comunes por municipio: provincia (12-13), municipio (14-16), distrito (17-18),
                 nombre (19-118), votos en blanco (190-197)
   06xxaamm.DAT  votos por candidatura y municipio: provincia (10-11), municipio (12-14),
                 distrito (15-16), candidatura (17-22), votos (23-30)
+  10xxaamm.DAT  (zip de mesas) lo mismo por mesa; se suma por municipio
 Distrito 99 = total del municipio. Municipio 999 = voto CERA (residentes en el exterior), que se
 escruta días después y queda fuera del modelo.
 
@@ -24,7 +25,7 @@ import pandas as pd
 DATA = Path(__file__).resolve().parent.parent / "data"
 GROUPS = ["pp", "psoe", "vox", "sumar", "erc", "junts", "bildu", "pnv", "bng", "cc", "upn", "otros"]
 ZIPS = {2023: "02202307", 2019: "02201911", 2016: "02201606"}
-URL = "https://infoelectoral.interior.gob.es/estaticos/docxl/apliextr/{c}_MUNI.zip"
+URL = "https://infoelectoral.interior.gob.es/estaticos/docxl/apliextr/{c}_{k}.zip"
 ATLAS = "https://registry.npmjs.org/es-atlas/-/es-atlas-0.6.0.tgz"
 
 PROV = {"01": "Araba/Álava", "02": "Albacete", "03": "Alicante/Alacant", "04": "Almería", "05": "Ávila", "06": "Badajoz",
@@ -60,38 +61,75 @@ def group_of(siglas):
 def descargar(year: int) -> Path:
     """Baja el zip del Interior. Desde el entorno donde se armó el proyecto el dominio está
     bloqueado: correrlo en tu máquina, o bajarlo a mano y pasar la ruta."""
-    dest = DATA / f"{ZIPS[year]}_MUNI.zip"
-    if not dest.exists():
-        print(f"bajando {URL.format(c=ZIPS[year])} …")
-        urllib.request.urlretrieve(URL.format(c=ZIPS[year]), dest)
-    return dest
+    for k in ("MUNI", "MESA"):
+        dest = DATA / f"{ZIPS[year]}_{k}.zip"
+        if dest.exists():
+            return dest
+    for k in ("MUNI", "MESA"):
+        dest, url = DATA / f"{ZIPS[year]}_{k}.zip", URL.format(c=ZIPS[year], k=k)
+        try:
+            print(f"bajando {url} …")
+            urllib.request.urlretrieve(url, dest)
+            return dest
+        except Exception as e:
+            print(f"  falló: {e}")
+    raise SystemExit("no se pudo bajar el zip: bajalo a mano y pasá la ruta")
 
 
-def _dat(z, prefix):
+def _dat(z, prefix, required=True):
     names = [n for n in z.namelist() if Path(n).name.startswith(prefix) and n.upper().endswith(".DAT")]
     if not names:
-        raise ValueError(f"el zip no trae el fichero {prefix}xxxxxx.DAT: {z.namelist()}")
+        if required:
+            raise ValueError(f"el zip no trae el fichero {prefix}xxxxxx.DAT: {z.namelist()}")
+        return None
     return z.read(names[0]).decode("latin-1").splitlines()
 
 
+# Posiciones (base 0) de provincia, municipio, distrito, candidatura y votos en el fichero de votos.
+# El zip "Municipios" trae el 06 (por municipio) y el zip "Mesas" el 10 (por mesa); se prueban las
+# variantes con y sin código de comunidad y se queda la que cruza con las candidaturas del 03.
+LAYOUTS = {"06": [((9, 11), (11, 14), (14, 16), (16, 22), (22, 30)),
+                  ((11, 13), (13, 16), (16, 18), (18, 24), (24, 32))],
+           "10": [((11, 13), (13, 16), (16, 18), (23, 29), (29, 37)),
+                  ((9, 11), (11, 14), (14, 16), (21, 27), (27, 35))]}
+
+
+def _votes(lines, kind, codes):
+    best = None
+    for lay in LAYOUTS[kind]:
+        rows = [tuple(l[a:b] for a, b in lay) for l in lines if len(l) >= lay[-1][1]]
+        v = pd.DataFrame(rows, columns=["prov", "muni", "dist", "cand", "votos"])
+        ok = v.cand.isin(codes).mean() if len(v) else 0
+        ok *= v.prov.isin(PROV).mean() if len(v) else 0
+        if best is None or ok > best[0]:
+            best = (ok, v)
+    ok, v = best
+    if ok < 0.98:
+        raise ValueError(f"no se pudo leer el fichero {kind} (¿cambió el formato?): sólo cruza el {ok:.0%}")
+    v["votos"] = pd.to_numeric(v.votos, errors="coerce").fillna(0)
+    v = v[(v.muni != "999") & v.prov.isin(PROV)]          # 999: voto CERA
+    if kind == "06" and (v.dist == "99").any():
+        v = v[v.dist == "99"]                              # 99: total del municipio
+    return v
+
+
 def read_zip(path):
-    """Devuelve (votos por municipio y candidatura, nombres y blancos por municipio, candidaturas)."""
+    """Devuelve (votos por municipio y candidatura, nombres y blancos por municipio, candidaturas).
+    Acepta el zip de municipios (fichero 06) o el de mesas (fichero 10, se suma por municipio)."""
     with zipfile.ZipFile(path) as z:
-        c03, c05, c06 = _dat(z, "03"), _dat(z, "05"), _dat(z, "06")
+        c03, c05 = _dat(z, "03"), _dat(z, "05", required=False)
+        kind = "06" if _dat(z, "06", required=False) else "10"
+        cv = _dat(z, kind)
     cand = pd.DataFrame([(l[8:14], l[14:64].strip(), l[64:214].strip()) for l in c03 if len(l) >= 64],
                         columns=["cand", "siglas", "nombre"])
     cand["g"] = cand.siglas.map(group_of)
-    v = pd.DataFrame([(l[9:11], l[11:14], l[14:16], l[16:22], l[22:30]) for l in c06 if len(l) >= 30],
-                     columns=["prov", "muni", "dist", "cand", "votos"])
-    v["votos"] = pd.to_numeric(v.votos, errors="coerce").fillna(0)
-    v = v[(v.dist == "99") & (v.muni != "999") & v.prov.isin(PROV)]
-    m = pd.DataFrame([(l[11:13], l[13:16], l[16:18], l[18:118].strip(), l[189:197]) for l in c05 if len(l) >= 197],
+    v = _votes(cv, kind, set(cand.cand))
+    v = v.groupby(["prov", "muni", "cand"], as_index=False).votos.sum()
+    m = pd.DataFrame([(l[11:13], l[13:16], l[16:18], l[18:118].strip(), l[189:197]) for l in (c05 or []) if len(l) >= 197],
                      columns=["prov", "muni", "dist", "name", "blancos"])
     m = m[(m.dist == "99") & (m.muni != "999")]
     m["blancos"] = pd.to_numeric(m.blancos, errors="coerce").fillna(0)
     m["unit"] = m.prov + m.muni
-    if v.empty or v.cand.isin(cand.cand).mean() < 0.99:
-        raise ValueError("no se pudo leer el fichero 06 (¿cambió el formato?)")
     return v.merge(cand[["cand", "siglas", "g"]], on="cand", how="left"), m.set_index("unit"), cand
 
 
@@ -102,9 +140,10 @@ def from_zip(path, coords=True):
     for g in GROUPS:
         if g not in piv:
             piv[g] = 0
-    out = pd.DataFrame({"unit": piv.unit, "region": piv.prov, "name": piv.unit.map(m["name"]).fillna(piv.unit)})
+    geo = municipios()
+    names = m["name"] if len(m) else geo.set_index("unit")["name"]
+    out = pd.DataFrame({"unit": piv.unit, "region": piv.prov, "name": piv.unit.map(names).fillna(piv.unit)})
     if coords:
-        geo = municipios()
         c = geo.set_index("unit")
         out["lat"], out["lon"] = out.unit.map(c.lat), out.unit.map(c.lon)
         miss = out.lat.isna()
@@ -117,7 +156,7 @@ def from_zip(path, coords=True):
         out[g] = piv[g].astype(int)
     tot = v.votos.sum()
     print("votos por grupo:", {g: f"{out[g].sum() / tot:.1%}" for g in GROUPS},
-          f"· blancos {m.blancos.sum() / (tot + m.blancos.sum()):.2%}")
+          f"· blancos {m.blancos.sum() / (tot + m.blancos.sum()):.2%}" if len(m) else "")
     top = v.groupby(["g", "siglas"]).votos.sum().sort_values(ascending=False)
     print("otros más votados:", top.loc["otros"].head(6).to_dict() if "otros" in top else {})
     return out
@@ -175,6 +214,17 @@ def municipios() -> pd.DataFrame:
         if best:
             rows.append((f["properties"]["id"], f["properties"].get("name"), best[1], best[0]))
     return pd.DataFrame(rows, columns=["unit", "name", "lat", "lon"])
+
+
+NAMES = {"pp": "PP", "psoe": "PSOE", "vox": "Vox", "sumar": "Sumar", "erc": "ERC", "junts": "Junts", "bildu": "EH Bildu",
+         "pnv": "PNV", "bng": "BNG", "cc": "CC", "upn": "UPN", "otros": "Otros"}
+
+
+def pair_named(base_year=2019, target_year=2023):
+    """Como `pair`, con las columnas de votos con el nombre de cada partido (la regla de escaños
+    trabaja con nombres: bloques y "Otros", que no recibe escaños)."""
+    b, t = pair(base_year, target_year)
+    return b.rename(columns=NAMES), t.rename(columns=NAMES)
 
 
 def pair(base_year=2019, target_year=2023):

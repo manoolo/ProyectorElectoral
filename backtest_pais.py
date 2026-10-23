@@ -3,6 +3,7 @@ repetición de su última elección para la página.
 
   python backtest_pais.py ar      # Argentina 2015→2019 (datos de electorAr, se bajan solos)
   python backtest_pais.py br      # Brasil 2022, 1ª → 2ª vuelta (baja el zip del TSE; correr en tu máquina)
+  python backtest_pais.py es      # España, Congreso 2019 (nov.) → 2023 (zips del Interior en data/)
 """
 import sys, json, time
 import numpy as np, pandas as pd
@@ -25,6 +26,19 @@ PAISES = {
                colors={"Lula": "#c8323a", "Bolsonaro": "#1f4e9c"},
                sub="Reproduce la segunda vuelta de 2022 municipio por municipio, con la primera vuelta como base, en un orden de llegada simulado con sesgo.",
                truth_text="Resultado real: Lula 50,9%, Bolsonaro 49,1%."),
+    # España: los grupos ya vienen con el nombre del partido (la regla de escaños usa nombres)
+    "es": dict(load=lambda: __import__("adapters.es", fromlist=["x"]).pair_named(2019, 2023),
+               groups=["PP", "PSOE", "Vox", "Sumar", "ERC", "Junts", "EH Bildu", "PNV", "BNG", "CC", "UPN", "Otros"],
+               rule="espana_congreso_2023",
+               rule_args={"blocs": {"derecha": ["PP", "Vox", "UPN"],
+                                    "investidura": ["PSOE", "Sumar", "ERC", "Junts", "EH Bildu", "PNV", "BNG", "CC"]},
+                          "bloc_labels": {"derecha": "PP + Vox + UPN",
+                                          "investidura": "PSOE y los socios de su investidura (con Junts y CC)"}},
+               title="España 2023, Congreso",
+               names={g: g for g in ["PP", "PSOE", "Vox", "Sumar", "ERC", "Junts", "EH Bildu", "PNV", "BNG", "CC", "UPN", "Otros"]},
+               colors=None,
+               sub="Reproduce el escrutinio de las generales de 2023 municipio por municipio, con la base de noviembre de 2019, en un orden de llegada simulado con sesgo. Mové el control para ver qué decía la proyección en cada momento.",
+               truth_text="Resultado real: PP 137, PSOE 121, Vox 33, Sumar 31, ERC 7, Junts 7, EH Bildu 6, PNV 5, BNG 1, CC 1, UPN 1."),
 }
 
 
@@ -36,7 +50,7 @@ def main(c):
     base = Base(b, G)
     us = json.load(open("config/params_us.json"))
     P = dict(DEFAULTS, **{k: v for k, v in us.items() if k != "calib"}, calib=1.0, n_sims=400)
-    rule = RULES[spec["rule"]]()
+    rule = RULES[spec["rule"]](**spec.get("rule_args", {}))
     cands = list(G)  # en el backtest los candidatos son los grupos
     df, info = run(base, t, cands, P, rule=rule, orders=("sesgado",) * 12 + ("aleatorio",) * 3, cuts=CUTS, seed=31)
     print(f"backtest listo en {round(time.time() - t0)} s")
@@ -69,7 +83,8 @@ def main(c):
     T = t[G].sum()
     cfg = json.load(open(f"config/{c}.json", encoding="utf-8"))
     doc = dict(country=c, mode="replay",
-               config=dict(cfg, candidates=cand_map, colors=spec["colors"], title=spec["title"]),
+               config=dict(cfg, candidates=cand_map, colors=spec["colors"] or {n: cfg["colors"][n] for n in cand_map},
+                           title=spec["title"], **({"rule_args": spec["rule_args"]} if "rule_args" in spec else {})),
                regions=out["regions"], history=hist, calib=us["calib"], replay_sub=spec["sub"],
                truth=dict(shares=(T / T.sum()).round(4).tolist(), text=spec["truth_text"]),
                backtest=dict(cal="EEUU", eval=spec["title"], cuts=CUTS, methods=methods,
