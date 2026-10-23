@@ -114,6 +114,10 @@ def main():
     cli = Cliente()
     ciclo, pleito, eleicao = descubrir(cli, 2026, a.turno)
     mus = municipios(cli, ciclo, pleito, [u.lower() for u in (a.uf or UFS)])
+    # sonda: antes de pedir 5.570 archivos, uno solo. Si todavía no existe (el escrutinio no
+    # arrancó), se corta acá: muchos 404 seguidos hacen que el TSE bloquee la IP 10 minutos.
+    if mus and resultado(cli, ciclo, eleicao, *mus[0]) is None:
+        raise SystemExit("todavía no hay resultados publicados; reintento en la próxima vuelta")
     with ThreadPoolExecutor(16) as ex:
         res = [r for r in ex.map(lambda m: resultado(cli, ciclo, eleicao, *m), mus) if r]
     xw = pd.read_csv(ROOT / "data" / "br_tse_ibge.csv", dtype=str)
