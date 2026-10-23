@@ -81,10 +81,26 @@ def races(zdir, office, year=2022):
     return df, names
 
 
-def pair(base_year, target: pd.DataFrame):
+def pvi_year(year, prev=None, w=0.75):
+    """Presidencial por condado con el criterio del PVI de Cook: shares de la última (`year`) y la
+    anterior mezclados 75/25, con el volumen de votos de la última. prev=None: la de 4 años antes."""
+    b = load_year(year).set_index("unit")
+    b[GROUPS] = b[GROUPS].astype(float)
+    if prev is False:
+        return b.reset_index()
+    a = load_year(prev or year - 4).set_index("unit")
+    common = b.index.intersection(a.index)
+    sb = b.loc[common, GROUPS].div(b.loc[common, GROUPS].sum(axis=1), axis=0)
+    sa = a.loc[common, GROUPS].div(a.loc[common, GROUPS].sum(axis=1), axis=0)
+    mix = (w * sb + (1 - w) * sa.fillna(sb)).mul(b.loc[common, GROUPS].sum(axis=1), axis=0)
+    b.loc[common, GROUPS] = mix.to_numpy()
+    return b.reset_index()
+
+
+def pair(base_year, target: pd.DataFrame, pvi=False):
     """Base presidencial por condado alineada con las carreras de `target` (misma lógica que adapters.us.pair:
     los condados que no existen en ambos lados se juntan en un 'resto' por carrera)."""
-    b = load_year(base_year)
+    b = pvi_year(base_year) if pvi else load_year(base_year)
     out_b, out_t = [], []
     for race, t in target.groupby("region"):
         st = race.split("-")[0]
@@ -117,10 +133,10 @@ def add_coords(b):
     return b
 
 
-def base_2026(year=2024, states=None):
+def base_2026(year=2024, states=None, pvi=False):
     """Base para 2026: presidencial `year` por condado de los estados con carrera.
     states: lista de carreras ('OH', 'FL', ...); Nebraska y demás van igual, con el grupo dem como 'no republicano'."""
-    b = load_year(year)
+    b = pvi_year(year) if pvi else load_year(year)
     out = []
     for race in states:
         bb = b[b.region == race.split("-")[0]].copy()

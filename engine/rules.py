@@ -54,38 +54,49 @@ def segunda_vuelta():
     return rule
 
 
+
+def senado(fijas: dict, desempate: str, total=100, indep: dict | None = None):
+    """Control del Senado de EEUU. `fijas`: bancas que no se eligen (o que no se modelan) por fuerza;
+    `desempate`: la fuerza del vicepresidente, que desempata 50-50. Cada carrera (región) la gana
+    el más votado (Georgia va a segunda vuelta si nadie pasa el 50%: se informa aparte).
+    `indep`: {región: nombre} para carreras donde el lugar del demócrata lo ocupa un independiente
+    que no dijo con quién va a votar (Nebraska 2026, Osborn): su banca se cuenta aparte.
+    Devuelve el control, las bancas de cada fuerza y el ganador de cada carrera."""
+    indep = indep or {}
+    def rule(V, C, regions):
+        tally = {c: fijas.get(c, 0) for c in C}
+        ind = 0
+        out = {}
+        for r, reg in enumerate(regions):
+            w = C[int(np.argmax(V[r]))]
+            if reg in indep and w != desempate:
+                ind += 1
+                out[f"gana_{reg}"] = indep[reg]
+            else:
+                tally[w] += 1
+                out[f"gana_{reg}"] = w
+            if reg.startswith("GA"):
+                out["balotaje_GA"] = bool(V[r].max() / max(V[r].sum(), 1) <= 0.5)
+        for c in C:                                  # siempre las mismas claves: se resumen entre simulaciones
+            out[f"bancas_{c}"] = int(tally[c])
+        if indep:
+            out["bancas_Independientes"] = ind
+        half = total // 2
+        w = max(tally, key=tally.get)
+        if tally[w] > half or (tally[w] == half and w == desempate):
+            out["control"] = w
+        elif ind and tally[w] + ind > half:
+            out["control"] = "Depende de " + "/".join(sorted(set(indep.values())))
+        else:
+            out["control"] = "Sin mayoría propia"
+        return out
+    return rule
+
 RULES = {"us_ec_2024": lambda: us_electoral_college(EV_2024),
          "us_ec_2012": lambda: us_electoral_college(EV_2012),
          "brasil": brasil, "brasil_2t": segunda_vuelta, "argentina": argentina,
          # Senado 2026: no se eligen 31 republicanas y 34 demócratas (incluye a King y Sanders);
          # Vance desempata. 2022 (backtest): sin CA ni AK en los datos, quedan fijas 37 D y 30 R
-         "us_senado_2026": lambda: senado({"Republicanos": 31, "Demócratas": 34}, "Republicanos"),
+         "us_senado_2026": lambda: senado({"Republicanos": 31, "Demócratas": 34}, "Republicanos",
+                                          indep={"NE": "Osborn"}),
          "us_senado_2022": lambda: senado({"gop": 30, "dem": 37}, "dem")}
-
-
-def senado(fijas: dict, desempate: str, total=100):
-    """Control del Senado de EEUU. `fijas`: bancas que no se eligen (o que no se modelan) por fuerza;
-    `desempate`: la fuerza del vicepresidente, que desempata 50-50. Cada carrera (región) la gana
-    el más votado (Georgia va a segunda vuelta si nadie pasa el 50%: se informa aparte).
-    Devuelve el control, las bancas de cada fuerza y el ganador de cada carrera."""
-    def rule(V, C, regions):
-        tally = {c: fijas.get(c, 0) for c in C}
-        out = {}
-        for r, reg in enumerate(regions):
-            w = C[int(np.argmax(V[r]))]
-            tally[w] += 1
-            out[f"gana_{reg}"] = w
-            if reg.startswith("GA"):
-                out["balotaje_GA"] = bool(V[r].max() / max(V[r].sum(), 1) <= 0.5)
-        for c in C:
-            if fijas.get(c) is not None or tally[c]:
-                out[f"bancas_{c}"] = int(tally[c])
-        w = max(tally, key=tally.get)
-        half = total // 2
-        if tally[w] > half or (tally[w] == half and w == desempate):
-            out["control"] = w
-        else:
-            # 50-50 sin el vicepresidente, o nadie con 50: decide con quién votan los independientes
-            out["control"] = desempate if tally.get(desempate, 0) >= half else "sin mayoría propia"
-        return out
-    return rule
