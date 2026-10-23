@@ -18,7 +18,7 @@
    "office": "Presidente, primera vuelta", "data": "data/ar_2027.json", "map": "ar", "status": "upcoming",
    "config": {"title": "Argentina", "office": "Presidente, primera vuelta",
               "candidates": {"La Libertad Avanza": "lla", "Peronismo": "peronismo", "Juntos por el Cambio": "jxc", "Otros": "otros"},
-              "colors": {"La Libertad Avanza": "#6b3fa0", "Peronismo": "#2a8fd6", "Juntos por el Cambio": "#e0b21b", "Otros": "#8a8f98"},
+              "colors": {"La Libertad Avanza": "#6b3fa0", "Peronismo": "#1e7fc8", "Juntos por el Cambio": "#c99400", "Otros": "#8a8f98"},
               "rule_kind": "two_round", "region_label": "Provincia", "unit_label": "circuitos",
               "note": "Gana en primera vuelta con 45% de los votos afirmativos, o con 40% y 10 puntos de ventaja. Base: primera vuelta 2023."},
    "setup": ["Bajá los resultados 2023 por mesa de la DINE y corré <code>python -m adapters.ar archivo.csv</code> (agrega por circuito).",

@@ -93,7 +93,7 @@ function readPaper(){
 }
 const hex = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
 function tint(h, t){ const a = hex(h); return `rgb(${a.map((v,i) => Math.round(PAPER[i] + (v-PAPER[i])*t)).join(",")})`; }
-const BINS = [[50,.32],[100,.52],[200,.76],[1e9,1]];      // margen en por mil → intensidad
+const BINS = [[50,.38],[100,.56],[200,.78],[1e9,1]];      // margen en por mil → intensidad
 const binT = m => BINS.find(b => m < b[0])[1];
 
 /* ---------------- página */
@@ -250,7 +250,7 @@ function paint(){
     const p = f.regions.proj[i]; let L = 0; p.forEach((v,k) => { if (v > p[L]) L = k; });
     const pa = f.regions.p_ahead ? f.regions.p_ahead[i] : null;
     const conf = pa == null ? 1 : (L === a ? pa : L === b ? 1-pa : .5);
-    return tint(col[L], conf > .95 ? 1 : conf > .8 ? .6 : .32);
+    return tint(col[L], conf > .95 ? 1 : conf > .8 ? .6 : .38);
   };
   const leaders = new Set(), vbw = STATE.vb[2], Lmax = vbw * (STATE.region ? .07 : .035), arrows = [];
   STATE.paths.forEach((p, j) => {
@@ -307,7 +307,7 @@ function legend(cfg,C,col,a,b,s,leaders){
     const arr = (c, dir) => `<svg viewBox="0 0 24 16" width="24" height="16"><path d="M${dir>0?4:20} 14L${dir>0?16:8} 3M${dir>0?10:14} 3L${dir>0?16:8} 3L${dir>0?16:8} 9" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"/></svg>`;
     el.innerHTML = `<span>${arr(col[a],1)} Más ${esc(C[a])} que en la elección anterior</span><span>${arr(col[b],-1)} Más ${esc(C[b])}</span><span>El largo indica cuántos puntos se movió la diferencia (tope: 25 puntos).</span>${note}`;
   } else if (m === "proy") {
-    el.innerHTML = [a,b].map(i => `<span class="ramp"><b>${esc(C[i])}</b>${[.32,.6,1].map(t => `<i style="background:${tint(col[i],t)}"></i>`).join("")}</span>`).join("") + `<span>Probabilidad de ganar la región: menos de 80%, 80 a 95% y más de 95%, según la proyección.</span>`;
+    el.innerHTML = [a,b].map(i => `<span class="ramp"><b>${esc(C[i])}</b>${[.38,.6,1].map(t => `<i style="background:${tint(col[i],t)}"></i>`).join("")}</span>`).join("") + `<span>Probabilidad de ganar la región: menos de 80%, 80 a 95% y más de 95%, según la proyección.</span>`;
   } else {
     el.innerHTML = `<span class="ramp"><b>Escrutado</b>${[.1,.4,.7,1].map(t => `<i style="background:${tint("#3d3d3d",.12+.88*t)}"></i>`).join("")}</span><span>De 0 a 100% de los votos esperados</span><span class="ramp"><i style="background:var(--nodata)"></i>Sin datos</span>${note}`;
   }
