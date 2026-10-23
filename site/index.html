@@ -30,6 +30,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:spac
 nav.countries{display:flex;gap:4px;background:var(--sheet);border:1px solid var(--rule);border-radius:999px;padding:3px}
 nav.countries button{font:inherit;font-size:.95rem;border:0;background:transparent;color:var(--ink);padding:6px 14px;border-radius:999px;cursor:pointer}
 nav.countries button[aria-selected="true"]{background:var(--ctl);color:var(--ctl-ink);font-weight:600}
+nav.countries[hidden]{display:none}
 
 .headline{padding:28px 0 6px}
 .headline h1{font-size:clamp(1.7rem,4.6vw,2.7rem);line-height:1.08;font-stretch:78%;font-weight:700;letter-spacing:-.015em;margin:0 0 8px;max-width:22ch}
@@ -138,8 +139,11 @@ const CONFIGS = {
              "Cuando se oficialicen los candidatos 2027, completá el mapeo de frentes en <code>config/ar.json</code>.",
              "Escribí un conversor del escrutinio provisorio y corré <code>python run_live.py ar escrutinio.csv</code>."]}
 };
+// Elección que muestra la página. Las demás siguen disponibles con #us o #ar en la dirección,
+// hasta que haya un menú de elecciones.
+const ACTIVE = ["br"];
 const ORDER = ["br","us","ar"];
-const STATE = {country:"us", data:{}, idx:{}, playing:null, showAll:false, sort:"close"};
+const STATE = {country:ACTIVE[0], data:{}, idx:{}, playing:null, showAll:false, sort:"close"};
 const $ = s => document.querySelector(s);
 const pct = (x,d=1) => (x*100).toFixed(d).replace(".",",")+"%";
 const pts = (x,d=1) => (x>=0?"+":"−")+Math.abs(x*100).toFixed(d).replace(".",",");
@@ -156,7 +160,9 @@ async function load(c){
 
 function nav(){
   const n = $("nav.countries"); n.innerHTML = "";
-  ORDER.forEach(c => {
+  const tabs = ACTIVE.includes(STATE.country) ? ACTIVE : [STATE.country];
+  n.hidden = tabs.length < 2;
+  tabs.forEach(c => {
     const b = document.createElement("button");
     b.textContent = CONFIGS[c].title; b.setAttribute("role","tab");
     b.setAttribute("aria-selected", c===STATE.country); b.onclick = () => { stop(); STATE.country=c; STATE.showAll=false; history.replaceState(null,"","#"+c); render(); };
