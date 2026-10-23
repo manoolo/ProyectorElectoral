@@ -5,5 +5,6 @@
  "colors": {"Harris": "#2f5fb3", "Trump": "#c8323a", "Otros": "#8a8f98"},
  "rule": "us_ec_2024", "rule_kind": "ec", "region_label": "Estado", "unit_label": "condados",
  "base": "data/us_base.csv", "params": "config/params_us.json",
- "note": "Votos electorales con ganador por estado; Maine y Nebraska se tratan como ganador se lleva todo."
+ "note": "Votos electorales con ganador por estado; Maine y Nebraska se tratan como ganador se lleva todo.",
+ "geo": {"map": "us", "unit_key": null}
 }

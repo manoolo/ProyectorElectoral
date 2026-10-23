@@ -156,3 +156,13 @@ python -m adapters.br_live data/br_actual.csv && python run_live.py br data/br_a
 - **Backtest de Brasil.** El código está listo (`backtest_pais.py br`), pero el TSE no fue accesible desde donde se armó el proyecto, así que todavía no se corrió.
 - **Más elecciones de calibración.** Por ejemplo, Argentina 2011→2015 o EEUU 2012→2016, para que el intervalo dependa menos de una sola elección.
 - **Orden real de llegada.** Brasil lo publica en el "histórico de totalização"; usarlo haría el backtest más realista que los órdenes simulados.
+
+## Página, mapas y elecciones
+
+La página (`site/index.html` + `site/app.js`) muestra una elección por vez; las demás se eligen desde el menú "Elecciones", que lee `site/elecciones.json`. El buscador del menú acepta cualquier país: si no está configurado, explica qué hace falta para lanzarlo.
+
+**Mapas.** `python build_maps.py` arma `site/geo/<país>.json` (país entero, con regiones y unidades) y `site/geo/<país>/<región>.json` (detalle, se baja al entrar a la región). Los trazos quedan proyectados y simplificados con mapshaper (Node), así que el navegador no necesita librerías. Fuentes: condados del Censo de EEUU (`data/counties.json`), departamentos del INDEC (`data/ar_deptos.geojson`, cruzados por nombre con las secciones electorales) y municipios del IBGE vía geodata-br (se bajan solos). Sólo hay que correrlo si cambia la geometría.
+
+**Datos por unidad.** Con un bloque `geo` en `config/<país>.json` (`map`: carpeta de `site/geo`; `unit_key`: cuántas partes de la clave de unidad usar, p. ej. 2 en Argentina para pasar de circuito a departamento), `run_live.py`, `replay.py` y `backtest_pais.py` agregan a cada frame un `map` con, por unidad de mapa, la fracción escrutada, el reparto del voto contado y los votos contados. En la repetición sólo van las unidades que cambiaron desde el corte anterior; en vivo, sólo el último corte lleva mapa. El JSON también lleva `geo` con el resultado de la base por unidad, para el mapa de corrimientos.
+
+**Sumar una elección:** base y adaptador, `config/<país>.json` con su bloque `geo`, `prep_<país>` en `build_maps.py`, feed en vivo y una entrada en `site/elecciones.json`.

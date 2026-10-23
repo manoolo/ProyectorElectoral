@@ -1,0 +1,28 @@
+{
+ "_doc": "Elecciones que muestra la página. Para sumar una: su config/<país>.json, la geometría (build_maps.py) y una entrada acá. 'data' es el JSON que escriben run_live.py / replay.py; 'map' es la carpeta de site/geo. 'config' se usa sólo mientras no hay datos.",
+ "default": "br-2026-2t",
+ "elections": [
+  {"id": "br-2026-2t", "country": "br", "name": "Brasil", "year": 2026, "date": "2026-10-25",
+   "office": "Presidente, 2ª vuelta", "data": "data/br.json", "map": "br", "status": "live",
+   "config": {"title": "Brasil", "office": "Presidente, 2ª vuelta", "candidates": {"Lula": "lula", "Flávio Bolsonaro": "bolsonaro"},
+              "colors": {"Lula": "#c8323a", "Flávio Bolsonaro": "#1f4e9c"}, "rule_kind": "runoff", "region_label": "Estado", "unit_label": "municipios",
+              "note": "Segunda vuelta: gana quien tiene más votos válidos. Base: 1ª vuelta 2026, municipio por municipio."},
+   "setup": ["Bajá la 1ª vuelta 2026 por municipio: <code>python -m adapters.br_live data/br_1t_2026.csv --turno 1 --config br_1t</code>.",
+             "Armá la base del balotaje: <code>python -m adapters.br base2t data/br_1t_2026.csv</code>.",
+             "Durante el escrutinio: <code>python en_vivo.py br --turno 2</code>."]},
+  {"id": "us-2024", "country": "us", "name": "Estados Unidos", "year": 2024, "date": "2024-11-05",
+   "office": "Presidente", "data": "data/us.json", "map": "us", "status": "replay"},
+  {"id": "ar-2019", "country": "ar", "name": "Argentina", "year": 2019, "date": "2019-10-27",
+   "office": "Presidente, primera vuelta", "data": "data/ar.json", "map": "ar", "status": "replay"},
+  {"id": "ar-2027", "country": "ar", "name": "Argentina", "year": 2027, "date": "2027-10-24",
+   "office": "Presidente, primera vuelta", "data": "data/ar_2027.json", "map": "ar", "status": "upcoming",
+   "config": {"title": "Argentina", "office": "Presidente, primera vuelta",
+              "candidates": {"La Libertad Avanza": "lla", "Peronismo": "peronismo", "Juntos por el Cambio": "jxc", "Otros": "otros"},
+              "colors": {"La Libertad Avanza": "#6b3fa0", "Peronismo": "#2a8fd6", "Juntos por el Cambio": "#e0b21b", "Otros": "#8a8f98"},
+              "rule_kind": "two_round", "region_label": "Provincia", "unit_label": "circuitos",
+              "note": "Gana en primera vuelta con 45% de los votos afirmativos, o con 40% y 10 puntos de ventaja. Base: primera vuelta 2023."},
+   "setup": ["Bajá los resultados 2023 por mesa de la DINE y corré <code>python -m adapters.ar archivo.csv</code> (agrega por circuito).",
+             "Cuando se oficialicen los candidatos 2027, completá el mapeo de frentes en <code>config/ar.json</code>.",
+             "Escribí un conversor del escrutinio provisorio y corré <code>python run_live.py ar escrutinio.csv</code>."]}
+ ]
+}

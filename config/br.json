@@ -26,5 +26,6 @@
   "LULA": "Lula",
   "FLÁVIO": "Flávio Bolsonaro",
   "FLAVIO": "Flávio Bolsonaro"
- }
+ },
+ "geo": {"map": "br", "unit_key": null}
 }

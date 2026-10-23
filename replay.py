@@ -9,7 +9,7 @@ import numpy as np
 from engine.model import Base, DEFAULTS, project
 from engine.backtest import make_order, snapshot
 from engine.rules import RULES
-from engine.output import frame
+from engine.output import frame, geo_index
 from engine.analysis import analyze
 
 SPEC = {
@@ -32,13 +32,18 @@ def main(c):
     cand_map = doc["config"]["candidates"]
     inv = {g: n for n, g in cand_map.items()}
     rule = RULES[sp["rule"]]()
+    cfg = json.load(open(f"config/{c}.json", encoding="utf-8"))
+    geo = geo_index(base, cfg)
+    if geo:
+        doc["config"]["geo"] = cfg["geo"]
+        doc["geo"] = geo["doc"]
     order = make_order(base, t, sp["order"], np.random.default_rng(sp["seed"]))
     cuts = list(np.arange(0.025, 1.0, 0.025)) + [1.0]
     hist = []
     for k, cut in enumerate(cuts):
         cur = snapshot(base, t, order, cut, sp["groups"]).rename(columns=inv)
         out = project(base, cur, cand_map, P, rule)
-        fr = frame(out, f"paso {k + 1}")
+        fr = frame(out, f"paso {k + 1}", geo)
         fr["analysis"] = analyze(base, cur, cand_map, out, polls=doc["config"].get("polls"),
                                  scatter=500 if (k % 4 == 3 or k == len(cuts) - 1) else 0)
         hist.append(fr)

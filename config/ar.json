@@ -33,5 +33,6 @@
  "base": "data/ar_base.csv",
  "params": "config/params_ar.json",
  "note": "Gana en primera vuelta con 45% de los votos afirmativos, o con 40% y 10 puntos de ventaja. Base: primera vuelta 2023. Los candidatos y el mapeo de frentes se definen cuando se oficialicen.",
- "calibrated": false
+ "calibrated": false,
+ "geo": {"map": "ar", "unit_key": 2}
 }
