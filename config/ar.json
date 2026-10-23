@@ -1,0 +1,37 @@
+{
+ "country": "ar",
+ "title": "Argentina",
+ "office": "Presidente, primera vuelta",
+ "groups": [
+  "lla",
+  "peronismo",
+  "jxc",
+  "otros"
+ ],
+ "party_map": {
+  "LIBERTAD AVANZA": "lla",
+  "UNION POR LA PATRIA": "peronismo",
+  "UNIÓN POR LA PATRIA": "peronismo",
+  "JUNTOS POR EL CAMBIO": "jxc"
+ },
+ "candidates": {
+  "La Libertad Avanza": "lla",
+  "Peronismo": "peronismo",
+  "Juntos por el Cambio": "jxc",
+  "Otros": "otros"
+ },
+ "colors": {
+  "La Libertad Avanza": "#6b3fa0",
+  "Peronismo": "#2a8fd6",
+  "Juntos por el Cambio": "#e0b21b",
+  "Otros": "#8a8f98"
+ },
+ "rule": "argentina",
+ "rule_kind": "two_round",
+ "region_label": "Provincia",
+ "unit_label": "circuitos",
+ "base": "data/ar_base.csv",
+ "params": "config/params_ar.json",
+ "note": "Gana en primera vuelta con 45% de los votos afirmativos, o con 40% y 10 puntos de ventaja. Base: primera vuelta 2023. Los candidatos y el mapeo de frentes se definen cuando se oficialicen.",
+ "calibrated": false
+}
