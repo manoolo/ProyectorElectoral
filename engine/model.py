@@ -354,6 +354,8 @@ def project(base: Base, current: pd.DataFrame, candidates: dict, params: dict | 
         region_crude=sh(reg_obs).tolist(), region_proj=sh(reg_proj).tolist(),
         region_counted=(np.bincount(base.rid, Oto, R) / np.maximum(np.bincount(base.rid, Vhat, R), 1)).tolist(),
         region_votes=reg_proj.sum(1).tolist(),
+        # por unidad (para los mapas; engine/output.py los agrega a la unidad de mapa)
+        unit_obs=Oc, unit_proj=unit_tot, unit_expected=Vhat,
     )
     if rule is not None:
         out["rule_point"] = rule(reg_proj, C, out["regions"])

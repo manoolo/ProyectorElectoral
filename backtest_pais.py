@@ -9,7 +9,7 @@ import numpy as np, pandas as pd
 from engine.model import Base, DEFAULTS, project
 from engine.backtest import run, calibrate, coverage, make_order, snapshot, CUTS
 from engine.rules import RULES
-from engine.output import frame
+from engine.output import frame, geo_index
 
 PAISES = {
     "ar": dict(load=lambda: __import__("adapters.ar", fromlist=["x"]).pair(2015, 2019),
@@ -61,10 +61,11 @@ def main(c):
     rng = np.random.default_rng(8)
     order = make_order(base, t, "sesgado", rng)
     hist = []
+    geo = geo_index(base, json.load(open(f"config/{c}.json", encoding="utf-8")))
     for k, cut in enumerate(list(np.arange(0.025, 1.0, 0.025)) + [1.0]):
         cur = snapshot(base, t, order, cut, G).rename(columns=names)
         out = project(base, cur, cand_map, P, rule)
-        hist.append(frame(out, f"paso {k + 1}"))
+        hist.append(frame(out, f"paso {k + 1}", geo))
     T = t[G].sum()
     cfg = json.load(open(f"config/{c}.json", encoding="utf-8"))
     doc = dict(country=c, mode="replay",
@@ -77,6 +78,8 @@ def main(c):
                              regla={m: round(float(df[df.metodo == m].regla_ok.mean()), 3) for m in methods},
                              coverage=cov_us.round(3).tolist(), coverage_global=round(g_us, 3),
                              n_orders=15, units=len(base.unit)))
+    if geo:
+        doc["geo"] = geo["doc"]
     for k in ("base", "params", "party_map", "setup", "live_names"):
         doc["config"].pop(k, None)
     doc["config"]["note"] = doc["config"]["note"].split(". Base")[0] + "."

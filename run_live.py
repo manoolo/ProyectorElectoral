@@ -12,7 +12,7 @@ import numpy as np
 from adapters.canonical import load_base, load_current
 from engine.model import Base, DEFAULTS, project
 from engine.rules import RULES
-from engine.output import frame
+from engine.output import frame, geo_index
 from engine.analysis import analyze
 from engine.polls import poll_shares
 
@@ -40,14 +40,18 @@ def main(country, current_path):
     if doc.get("mode") != "live":                     # había una repetición: la noche arranca de cero
         doc = {k: v for k, v in doc.items() if k == "backtest"}
     hist = [h for h in doc.get("history", []) if h["counted"] < out["counted_frac"] - 1e-4]
-    fr = frame(out, dt.datetime.now().isoformat(timespec="seconds"))
+    geo = geo_index(base, cfg)
+    fr = frame(out, dt.datetime.now().isoformat(timespec="seconds"), geo)
     fr["analysis"] = analyze(base, cur, cfg["candidates"], out, polls=polls, scatter=500)
     for h in hist:                                   # la muestra del gráfico sólo en el último frame
         if h.get("analysis"):
             h["analysis"].pop("scatter", None)
+        h.pop("map", None)                           # y el mapa por municipio, también
     hist.append(fr)
     doc.update(country=country, mode="live", config={k: cfg[k] for k in cfg if k not in ("base", "params", "party_map", "live_names")},
                regions=out["regions"], history=hist, calib=params["calib"])
+    if geo:
+        doc["geo"] = geo["doc"]
     path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
     p = np.array(out["proj"]) * 100
     print(f"{out['counted_frac']:.1%} escrutado → " + ", ".join(f"{c} {v:.1f}%" for c, v in zip(out["candidates"], p)))

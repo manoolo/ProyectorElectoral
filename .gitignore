@@ -4,3 +4,4 @@ data/*_actual.csv
 data/*.zip
 data/br_municipios_*.json
 data/br_1t_2026.csv
+data/br_municipios.geojson
