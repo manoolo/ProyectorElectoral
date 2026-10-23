@@ -1,8 +1,10 @@
 """EEUU en vivo: baja el escrutinio por condado y lo pasa al formato canónico.
 
 Fuente: el JSON público de resultados del New York Times (el que alimenta su página de resultados;
-lo usaron en 2022 y 2024 con esta forma). La URL de 2026 se confirma cuando publiquen la página:
-se pasa con --url o se deja en config/us_senado.json como "live_url".
+forma verificada con el de 2024). Hay un archivo nacional por cargo con el total de cada estado
+(.../pages/data/2024-11-05/results-senate.json) y uno por estado con los condados
+(.../results-arizona-us-senate.json); la URL de cada estado sale del nacional. La de 2026 se confirma
+cuando publiquen la página (el 23/10 todavía daba 404): --url o "live_url" en la config.
 
   python -m adapters.us_live data/us_senado_actual.csv --config us_senado
   python -m adapters.us_live data/us_senado_actual.csv --config us_senado --archivo resultados.json   # desde un archivo
@@ -14,12 +16,13 @@ Salida: unit (fips del condado, como en la base), frac, Republicanos, Demócrata
 Sólo entran las carreras de la config (por estado). Alaska llega por distrito legislativo: se usa el
 código del NYT si es el mismo de la base; si no, cae como unidad sin base y suma sólo lo observado.
 """
-import argparse, json, sys, time, urllib.request
+import argparse, json, re, sys, time, urllib.request
 from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 PARTY = {"DEM": "Demócratas", "D": "Demócratas", "REP": "Republicanos", "GOP": "Republicanos", "R": "Republicanos"}
+OFFICE = {"senado": "senate", "gobernador": "governor"}
 
 
 def get_json(url, tries=4):
@@ -45,51 +48,72 @@ def _g(d, *ks, default=None):
     return default
 
 
+def race_key(race, races):
+    """Clave de la carrera en la config: el estado (del nyt_id, 'PA-G-S-2024-11-05'), con -E si es especial
+    y el estado tiene también la regular."""
+    st = str(_g(race, "top_reporting_unit.state_postal", default="") or str(race.get("nyt_id", ""))[:2]).upper()
+    special = "special" in (str(race.get("type", "")) + str(race.get("nyt_id", ""))).lower()
+    return st + "-E" if special and (st + "-E") in races else st
+
+
+def state_urls(doc, office, races):
+    """URL del JSON por estado (el que trae los condados), sacada de la página de cada carrera:
+    nytimes.com/interactive/2024/11/05/us/elections/results-arizona-us-senate.html →
+    static01.nyt.com/elections-assets/pages/data/2024-11-05/results-arizona-us-senate.json"""
+    out = {}
+    for race in doc.get("races", []):
+        if office not in str(race.get("office", "")).lower().replace(" ", "").replace(".", ""):
+            continue
+        k = race_key(race, races)
+        u = race.get("url") or ""
+        m = re.search(r"/interactive/(\d{4})/(\d{2})/(\d{2})/us/elections/(results-[^/]+)\.html", u)
+        if k in races and m:
+            y, mo, d, name = m.groups()
+            out[k] = f"https://static01.nyt.com/elections-assets/pages/data/{y}-{mo}-{d}/{name}.json"
+    return out
+
+
 def parse_nyt(doc, office, races, indep=None):
-    """Filas (state, fips, group, votes, frac) de las carreras pedidas. office: 'senate', 'governor'.
-    indep: {estado: True} si el lugar del demócrata lo ocupa un independiente (Nebraska)."""
+    """Filas (region, unit, group, votes, frac) de las carreras pedidas, desde un JSON del NYT
+    (nacional o de un estado). office: 'senate', 'governor', 'president'. El partido sale de
+    candidate_metadata (party.nyt_id: DEM, GOP, ...). indep: {estado: True} si el lugar del
+    demócrata lo ocupa un independiente (Nebraska): el no republicano más votado va como Demócratas."""
     indep = indep or {}
     rows = []
     for race in doc.get("races", []):
-        off = str(_g(race, "office", "race_type", "type", default="")).lower()
-        if office not in off.replace(" ", ""):
+        if office not in str(race.get("office", "")).lower().replace(" ", "").replace(".", ""):
             continue
-        st = _g(race, "state.postal_code", "state_postal", "state.abbreviation", "state_id")
-        st = str(st).upper() if st else None
-        special = bool(_g(race, "special", "is_special", default=False)) or "special" in str(_g(race, "race_name", "title", default="")).lower()
-        key = st + "-E" if special and (st + "-E") in races else st
+        key = race_key(race, races)
         if key not in races:
             continue
-        meta = _g(race, "candidate_metadata", default={}) or {}
-        def group(c):
-            m = meta.get(c.get("nyt_id") or c.get("candidate_id"), {}) if isinstance(meta, dict) else {}
-            p = str(_g(c, "party.abbreviation", "party", default="") or _g(m, "party.abbreviation", "party", default="")).upper()
-            g = PARTY.get(p[:3], PARTY.get(p, "Otros"))
-            if g == "Otros" and indep.get(key):               # Osborn: el no republicano principal
-                g = "Demócratas" if c is top_other else "Otros"
-            return g
-        for ru in _g(race, "reporting_units", default=[]):
-            lvl = str(_g(ru, "level", default="")).lower()
-            if lvl not in ("county", "township", "district", "state-house", "subunit") and not _g(ru, "fips_county"):
-                continue
+        meta = race.get("candidate_metadata") or {}
+        def party(c):
+            m = meta.get(c.get("nyt_id"), {})
+            p = str(_g(m, "party.nyt_id", "party.abbreviation", default="") or "").upper().strip(".")
+            return PARTY.get(p, PARTY.get(p[:3], "Otros"))
+        units = [u for u in race.get("reporting_units", []) if str(u.get("level")) != "state"]
+        for ru in units:
             fips = str(_g(ru, "fips_state", default="")) + str(_g(ru, "fips_county", default=""))
-            fips = fips if len(fips) == 5 else str(_g(ru, "fips", "geo_id", "reporting_unit_id", default=fips)).zfill(5)
-            cands = _g(ru, "candidates", default=[])
-            others = [c for c in cands if PARTY.get(str(_g(c, "party.abbreviation", "party", default="")).upper()[:3]) is None]
-            top_other = max(others, key=lambda c: _g(c, "votes.total", "votes", default=0) or 0) if others else None
-            exp = _g(ru, "total_expected_vote", "expected_votes", default=None)
-            tot = _g(ru, "total_votes", default=None) or sum((_g(c, "votes.total", "votes", default=0) or 0) for c in cands)
-            frac = _g(ru, "eevp", "expected_vote_pct", default=None)
+            if len(fips) != 5:
+                fips = str(_g(ru, "nyt_id", default=fips))
+            cands = ru.get("candidates", [])
+            votes = [float(_g(c, "votes.total", default=None) or (c.get("votes") if isinstance(c.get("votes"), (int, float)) else 0) or 0) for c in cands]
+            groups = [party(c) for c in cands]
+            if indep.get(key):
+                oth = [i for i, g in enumerate(groups) if g == "Otros"]
+                if oth and "Demócratas" not in groups:
+                    groups[max(oth, key=lambda i: votes[i])] = "Demócratas"
+            tot = _g(ru, "total_votes", default=None) or sum(votes)
+            frac = _g(ru, "eevp", default=None)
             if frac is not None:
-                frac = float(frac) / (100.0 if float(frac) > 1.0 else 1.0)
-            elif exp:
-                frac = min(tot / exp, 1.0)
+                frac = min(float(frac) / 100.0, 1.0)
+            elif _g(ru, "total_expected_vote"):
+                frac = min(tot / ru["total_expected_vote"], 1.0)
             else:
-                pr, pt = _g(ru, "precincts_reporting", default=None), _g(ru, "precincts_total", "total_precincts", default=None)
+                pr, pt = ru.get("precincts_reporting"), ru.get("precincts_total")
                 frac = pr / pt if pr is not None and pt else (1.0 if tot else 0.0)
-            for c in cands:
-                v = _g(c, "votes.total", "votes", default=0) or 0
-                rows.append((key, fips, group(c), float(v), frac))
+            for g, v in zip(groups, votes):
+                rows.append((key, fips, g, v, frac))
     return pd.DataFrame(rows, columns=["region", "unit", "group", "votes", "frac"])
 
 
@@ -138,7 +162,15 @@ def main():
         if not (url or a.archivo):
             sys.exit("falta la URL del feed: --url o \"live_url\" en la config")
         doc = json.loads(Path(a.archivo).read_text(encoding="utf-8")) if a.archivo else get_json(url)
-        df = parse_nyt(doc, office, races, indep)
+        # el archivo nacional sólo trae el total de cada estado: los condados están en el de cada estado
+        per_state = state_urls(doc, office, races) if not a.archivo else {}
+        parts = []
+        for k, u in sorted(per_state.items()):
+            try:
+                parts.append(parse_nyt(get_json(u, tries=2), office, races, indep))
+            except Exception as e:
+                print(f"  {k}: no se pudo bajar {u} ({e})")
+        df = pd.concat(parts, ignore_index=True) if parts else parse_nyt(doc, office, races, indep)
     out = canonical(df, special_suffix=True)
     base_units = set(pd.read_csv(ROOT / cfg["base"], dtype={"unit": str}).unit)
     sin_base = (~out.unit.isin(base_units)).sum()
