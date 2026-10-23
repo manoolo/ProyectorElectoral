@@ -141,6 +141,10 @@ const CONFIGS = {
 };
 // Elección que muestra la página. Las demás siguen disponibles con #us o #ar en la dirección,
 // hasta que haya un menú de elecciones.
+// Nombres completos de las regiones (los datos usan siglas)
+const REGION_NAMES = {br:{"AC": "Acre", "AL": "Alagoas", "AM": "Amazonas", "AP": "Amapá", "BA": "Bahia", "CE": "Ceará", "DF": "Distrito Federal", "ES": "Espírito Santo", "GO": "Goiás", "MA": "Maranhão", "MG": "Minas Gerais", "MS": "Mato Grosso do Sul", "MT": "Mato Grosso", "PA": "Pará", "PB": "Paraíba", "PE": "Pernambuco", "PI": "Piauí", "PR": "Paraná", "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte", "RO": "Rondônia", "RR": "Roraima", "RS": "Rio Grande do Sul", "SC": "Santa Catarina", "SE": "Sergipe", "SP": "São Paulo", "TO": "Tocantins"},
+  us:{"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "DC": "Washington D. C.", "FL": "Florida", "GA": "Georgia", "HI": "Hawái", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", "LA": "Luisiana", "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts", "MI": "Míchigan", "MN": "Minnesota", "MS": "Misisipi", "MO": "Misuri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "Nuevo Hampshire", "NJ": "Nueva Jersey", "NM": "Nuevo México", "NY": "Nueva York", "NC": "Carolina del Norte", "ND": "Dakota del Norte", "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregón", "PA": "Pensilvania", "RI": "Rhode Island", "SC": "Carolina del Sur", "SD": "Dakota del Sur", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "Virginia Occidental", "WI": "Wisconsin", "WY": "Wyoming"}};
+const rname = code => ((REGION_NAMES[STATE.country]||{})[code]) || code;
 const ACTIVE = ["br"];
 const ORDER = ["br","us","ar"];
 const STATE = {country:ACTIVE[0], data:{}, idx:{}, playing:null, showAll:false, sort:"close"};
@@ -292,7 +296,7 @@ function chart(d,cfg,C,idx){
 
 function regionsView(d,cfg,C,f,order){
   const a = order[0], b = order[1], R = d.regions;
-  let rows = R.map((name,r)=>({name, cnt:f.regions.counted[r], p:f.regions.proj[r], v:f.regions.votes[r], pa:f.regions.p_ahead?f.regions.p_ahead[r]:null}));
+  let rows = R.map((code,r)=>({name:rname(code), cnt:f.regions.counted[r], p:f.regions.proj[r], v:f.regions.votes[r], pa:f.regions.p_ahead?f.regions.p_ahead[r]:null}));
   const key = {close:o=>Math.abs(o.p[a]-o.p[b]), votes:o=>-o.v, counted:o=>o.cnt, name:o=>o.name}[STATE.sort];
   rows.sort((x,y)=> STATE.sort==="name" ? x.name.localeCompare(y.name) : key(x)-key(y));
   const shown = STATE.showAll ? rows : rows.slice(0,12);
@@ -321,12 +325,12 @@ function changesView(d,cfg,f){
      <div class="s">${pct(v.base)} → ${pct(v.now)}${v.shared_group?", contra el grupo de la base":""}</div></div>`).join("")
    + (A.polls && A.polls.error!=null ? `<div class="card"><div class="k">Contra las encuestas</div><div class="v">${pts(A.polls.error)}</div><div class="s">La proyección da ${esc(A.a)} ${pts(f.margin.mid)}; las encuestas, ${pts(A.polls.margin)}${A.polls.source?` (${esc(A.polls.source)})`:""}</div></div>` : "");
   // flechas por región
-  const R = A.by_region, W = 560, rowH = 18, H = R.length*rowH + 30, nameW = 128, valW = 46;
+  const R = A.by_region, W = 560, rowH = 18, H = R.length*rowH + 30, nameW = 150, valW = 46;
   const lo = Math.min(0, ...R.map(r=>r.delta)), hi = Math.max(0, ...R.map(r=>r.delta)), span = Math.max(hi - lo, .01);
   const xL = nameW + (lo < 0 ? valW : 0), xR = W - (hi > 0 ? valW : 6), sc = (xR - xL)/span, x0 = xL - lo*sc;
   let g = `<line x1="${x0}" x2="${x0}" y1="4" y2="${H-22}" stroke="var(--ink)" stroke-width="1"/>`;
   R.forEach((r,i) => { const y = 8 + i*rowH + rowH/2, x1 = x0 + r.delta*sc, col = r.delta >= 0 ? ca : cb;
-    g += `<text x="${nameW-8}" y="${y+4}" text-anchor="end">${esc(r.region)}</text>`;
+    g += `<text x="${nameW-8}" y="${y+4}" text-anchor="end">${esc(rname(r.region))}</text>`;
     g += `<line x1="${x0}" x2="${x1}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="5" stroke-linecap="round"/>`;
     g += `<text x="${x1 + (r.delta>=0?6:-6)}" y="${y+4}" text-anchor="${r.delta>=0?"start":"end"}" style="fill:var(--ink)">${pts(r.delta)}</text>`; });
   g += `${hi>0?`<text x="${x0+6}" y="${H-6}">hacia ${esc(A.a)} →</text>`:""}${lo<0?`<text x="${x0-6}" y="${H-6}" text-anchor="end">← hacia ${esc(A.b)}</text>`:""}`;
@@ -349,7 +353,7 @@ function changesView(d,cfg,f){
     P.forEach(p => { const col = p[1] >= 0 ? ca : cb; gs += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${(1+ (p[2]-2)*0.7).toFixed(1)}" fill="${col}" fill-opacity=".45"/>`; });
     gs += `<text x="${(Ws+m)/2}" y="${Hs-6}" text-anchor="middle">diferencia en la elección anterior</text><text x="10" y="${(Hs-m)/2}" transform="rotate(-90 10 ${(Hs-m)/2})" text-anchor="middle">diferencia ahora</text>`;
     scat = `<div class="panel"><h3>La geografía se mantiene</h3><p class="cap">Cada punto es uno de los ${u}; el tamaño, sus votos. Sobre la diagonal, no cambió nada. Correlación entre ambas elecciones: ${sf.persistence.toFixed(2).replace(".",",")}.</p><svg viewBox="0 0 ${Ws} ${Hs}" role="img" aria-label="Diferencia anterior contra actual">${gs}</svg></div>`; }
-  const F = A.flips, flipList = (arr, who) => arr.length ? `<ul class="flips">${arr.slice(0,6).map(x=>`<li>${esc(x.name)} (${esc(x.region)}): ${pts(x.base)} → ${pts(x.now)}</li>`).join("")}</ul>` : "";
+  const F = A.flips, flipList = (arr, who) => arr.length ? `<ul class="flips">${arr.slice(0,6).map(x=>`<li>${esc(x.name)} (${esc(rname(x.region))}): ${pts(x.base)} → ${pts(x.now)}</li>`).join("")}</ul>` : "";
   const flipsTxt = `<div class="panel"><h3>Cambios de ganador</h3>
     <p class="cap">Entre los ${u} ya completos, ${F.to_a.toLocaleString("es-AR")} pasaron a ${esc(A.a)} y ${F.to_b.toLocaleString("es-AR")} a ${esc(A.b)}. Había ${F.vulnerable.toLocaleString("es-AR")} que el perjudicado por el corrimiento había ganado por menos de ${Math.abs(md*100).toFixed(1).replace(".",",")} puntos, lo mismo que se movió el total; ${F.vulnerable_flipped.toLocaleString("es-AR")} cambiaron de mano.</p>
     ${F.to_a?`<p class="cap" style="margin-top:6px">Los más grandes que pasaron a ${esc(A.a)} (diferencia de ${esc(A.a)} sobre ${esc(A.b)}, antes → ahora):</p>${flipList(F.top_to_a, A.a)}`:""}
