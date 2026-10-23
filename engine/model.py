@@ -16,7 +16,8 @@ Incertidumbre: simulación con shocks regionales correlacionados + ruido por uni
 ambos estimados por validación cruzada (k-fold y dejando regiones afuera), y escalados
 por un factor de calibración que sale del backtest. Tomado de Silver Bulletin: un shock por
 perfil (unidades parecidas se equivocan juntas), colas gruesas (t de Student) y, opcional,
-un prior de encuestas que re-pondera las simulaciones (engine/polls.py).
+un prior de encuestas que re-pondera las simulaciones (engine/polls.py). Tomado de Cook Political
+Report: las calificaciones de cada carrera como prior por región (engine/ratings.py).
 """
 from __future__ import annotations
 import numpy as np
@@ -27,7 +28,8 @@ EPS = 0.5  # pseudo-votos para evitar log(0)
 
 DEFAULTS = dict(lam_x=1.0, lam_r=20.0, k=12, rho=0.8, h_km=150.0,
                 phi=0.5, kappa_r=8.0, w_pow=0.5, scale="logratio", ensemble=True, calib=1.0, n_sims=600, seed=7, k_nb=10, tau_nat=1.0, ens=("modelo", "vecinos"),
-                t_df=0, tau_feat=0.0, polls=None, poll_sd=0.035, poll_df=4)
+                t_df=0, tau_feat=0.0, polls=None, poll_sd=0.035, poll_df=4,
+                ratings=None, ratings_w=1.0, ratings_narrow=False)
 
 
 # ------------------------------------------------------------------ utilidades
@@ -416,6 +418,13 @@ def project(base: Base, current: pd.DataFrame, candidates: dict, params: dict | 
         sh_ = lambda X: X / np.maximum(X.sum(2, keepdims=True), 1e-9)
         d = np.median(sh_(np.concatenate(RS0)), 0) - np.median(sh_(RS), 0)
         RS = np.maximum(RS + d[None] * RS.sum(2, keepdims=True), 0.0)
+    if p["ratings"]:
+        # calificaciones de Cook como prior por carrera (engine/ratings.py)
+        from .ratings import adjust
+        party = {g: [i for i, c in enumerate(C) if candidates[c] == g] for g in ("dem", "gop")}
+        if party["dem"] and party["gop"]:
+            RS = adjust(RS, C, out["regions"], p["ratings"], party["dem"][0], party["gop"][0],
+                        p["ratings_w"], p["ratings_narrow"])
     nat = RS.sum(1) + obs_extra
     NS = nat / nat.sum(1, keepdims=True)
     rule_sims = [rule(RS[s], C, out["regions"]) for s in range(len(RS))] if rule is not None else []

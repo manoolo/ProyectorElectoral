@@ -32,6 +32,8 @@ def main(country, current_path):
     polls = poll_shares(cfg.get("polls"), list(cfg["candidates"]))
     if polls and isinstance(cfg.get("polls"), dict) and "_source" in cfg["polls"]:
         polls["_source"] = cfg["polls"]["_source"]
+    if cfg.get("ratings"):                 # calificaciones de Cook como prior por carrera (engine/ratings.py)
+        params.update(ratings=cfg["ratings"], ratings_w=cfg.get("ratings_w", 1.0))
     if polls and cfg.get("polls_prior"):
         params["polls"] = polls          # prior opcional: ver engine/polls.py y el README
     out = project(base, cur, cfg["candidates"], params, RULES[cfg["rule"]](**cfg.get("rule_args", {})))

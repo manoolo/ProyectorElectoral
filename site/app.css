@@ -180,3 +180,17 @@ footer{border-top:1px solid var(--rule);padding:16px 0 40px;color:var(--muted);f
 .outcome .line .sw{display:inline-block;width:10px;height:10px;margin-right:8px}
 .schip{display:inline-block;white-space:nowrap;font-size:.78rem;padding:1px 6px 1px 5px;border-left:4px solid var(--c);background:var(--nodata);margin:1px 0}
 td.seats{white-space:normal;text-align:left;min-width:200px;max-width:320px}
+
+/* Senado: carreras clave */
+.rating{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:2px;margin-left:8px;vertical-align:2px;white-space:nowrap}
+.races{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px 28px;margin-top:14px}
+.race{border-top:2px solid var(--ink);padding-top:8px;min-width:0}
+.race .rh{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px;font-weight:700}
+.race .rh .lnk{font:inherit;font-weight:700;font-size:1rem;background:none;border:0;padding:0;color:var(--ink);cursor:pointer;text-decoration:underline;text-decoration-color:var(--rule2);text-underline-offset:3px}
+.race .won{font-size:.75rem;font-weight:700;margin-left:auto}
+.race .rc{display:flex;justify-content:space-between;font-size:.88rem;font-weight:600;margin:6px 0 4px}
+.pbar{position:relative;display:flex;height:14px;background:var(--nodata)}
+.pbar div{height:100%}
+.pbar .mid{position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--paper)}
+.race .rs{display:flex;justify-content:space-between;gap:8px;font-size:.78rem;color:var(--muted);margin-top:4px}
+.race .rs span:nth-child(2){text-align:center}

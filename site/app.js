@@ -135,13 +135,14 @@ async function render(){
   const e = election(), d = await load(e);
   document.title = `${e.name} ${e.year}: ${e.office} · Proyector electoral`;
   if (!d) { app.innerHTML = emptyView(e); return; }
-  STATE.region = null; STATE.uq = ""; STATE.showAll = false;
+  STATE.region = null; STATE.uq = ""; STATE.showAll = false; STATE.allRaces = false;
+  if (d.mode === "previa") STATE.mode = "proy";
   const hasMap = !!mapId(d);
   app.innerHTML = `<div id="hdr"></div><div id="board" class="board"></div>
     ${d.history.length>1?`<div class="sticky"><div class="scrub" id="scrub"></div></div>`:""}
     ${hasMap?`<section id="mapsec"><h2 class="sec">Mapa de resultados</h2><div class="maptools"><div class="crumbs" id="crumbs"></div><div class="seg" id="modes" role="group" aria-label="Qué muestra el mapa"></div></div>
       <div class="mapbox" id="mapbox"><div class="loading">Cargando mapa…</div></div><div class="legend" id="mlegend"></div></section>`:""}
-    <section id="tablesec"></section><section class="chart" id="chartsec"></section><section class="changes" id="changes"></section><section class="method" id="method"></section>`;
+    <section id="racesec"></section><section id="tablesec"></section><section class="chart" id="chartsec"></section><section class="changes" id="changes"></section><section class="method" id="method"></section>`;
   if (d.history.length>1) scrubber(d);
   update();
   if (hasMap) buildMap();
@@ -155,9 +156,12 @@ function update(){
   $("#board").innerHTML = board(cfg,C,f,d,order);
   const so = $("#sout"); if (so) { so.textContent = `${pct(f.counted)} escrutado`; $("#slider").value = STATE.idx[e.id]; $("#play").textContent = STATE.playing?"Pausar":"Reproducir"; }
   if ($("#mapbox")) { tools(d,cfg,C,order); paint(); }
+  $("#racesec").innerHTML = cfg.rule_kind === "senate" && !STATE.region ? racesView(d,cfg,f) : "";
+  const rm = $("#moreraces"); if (rm) rm.onclick = () => { STATE.allRaces = !STATE.allRaces; update(); };
+  document.querySelectorAll("#racesec [data-r]").forEach(x => x.onclick = () => setRegion(x.dataset.r));
   $("#tablesec").innerHTML = STATE.region ? unitsTable(d,cfg,C,f,order) : regionsView(d,cfg,C,f,order);
   wireTable();
-  $("#chartsec").innerHTML = `<h2 class="sec">Proyección y conteo a lo largo de la noche</h2>
+  $("#chartsec").innerHTML = d.history.length < 2 ? "" : `<h2 class="sec">Proyección y conteo a lo largo de la noche</h2>
     <div class="legend2">${order.slice(0,2).map(i=>`<span style="color:${cfg.colors[C[i]]}"><i></i>${esc(C[i])} proyectado</span><span style="color:${cfg.colors[C[i]]}"><i class="dash"></i>conteo</span>`).join("")}${d.truth?`<span><i class="dot"></i>resultado final</span>`:""}</div>
     <div class="svgwrap">${chart(d,cfg,C,order.slice(0,2))}</div>`;
   $("#changes").innerHTML = changesView(d,cfg,f);
@@ -165,6 +169,7 @@ function update(){
 }
 
 function header(e,d,f,cfg,C,order){
+  if (cfg.rule_kind === "senate") return senateHeader(e,d,f,cfg);
   const lead = C[order[0]], mg = f.margin;
   const pill = d.mode === "replay" ? `<span class="pill replay">Repetición</span>` : `<span class="pill live">En vivo</span>`;
   const head = d.mode === "replay"
@@ -180,6 +185,7 @@ function header(e,d,f,cfg,C,order){
 }
 
 function board(cfg,C,f,d,order){
+  if (cfg.rule_kind === "senate") return senateBoard(cfg,C,f,d);
   const a = order[0], b = order[1], mg = f.margin;
   const called = mg && mg.p_a_ahead > .995 && f.counted > .5;
   const top = (i, right) => `<div class="top1 ${right?"r":""}"><div class="nm">${esc(C[i])}${i===a&&called?`<span class="check" title="Proyectado ganador en votos">✓</span>`:""}</div>
@@ -519,6 +525,87 @@ function seatsView(cfg,C,r,d){
     ${first.length?`<div class="line"><span>Primera fuerza en escaños: ${esc(first[0][0])}</span><strong>${pct(first[0][1],0)}</strong></div>`:""}
     ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
     <div class="note">${esc(cfg.note||"")}</div></div>`;
+}
+
+/* ---------------- Senado de EEUU (rule_kind "senate") */
+// probabilidad de cada resultado de una carrera, desde las simulaciones de la regla (gana_XX)
+const raceP = (f, r) => (f.rule && f.rule["gana_"+r]) || null;
+const RATING_ORDER = ["Solid D","Likely D","Lean D","Toss Up","Lean R","Likely R","Solid R"];
+function ratingChip(cfg, r){
+  const x = (cfg.ratings||{})[r]; if (!x) return "";
+  const side = x.endsWith("D") ? "Demócratas" : x.endsWith("R") ? "Republicanos" : null;
+  const t = {Solid:1, Likely:.6, Lean:.38}[x.split(" ")[0]] || 0;
+  const bg = side ? tint(cfg.colors[side], t) : "var(--nodata)", ink = side && t === 1 ? "#fff" : "#121212";
+  const es = {"Solid":"Segura","Likely":"Probable","Lean":"Inclinada"}[x.split(" ")[0]];
+  return `<span class="rating" style="background:${bg};color:${ink}" title="Calificación de Cook Political Report">${x === "Toss Up" ? "Toss Up" : `${es} ${x.endsWith("D") ? "D" : "R"}`}</span>`;
+}
+function senateHeader(e,d,f,cfg){
+  const pill = d.mode === "replay" ? `<span class="pill replay">Repetición</span>` : d.mode === "previa" ? `<span class="pill replay">Previa</span>` : `<span class="pill live">En vivo</span>`;
+  const ctl = f.rule && f.rule.control ? Object.entries(f.rule.control).sort((a,b)=>b[1]-a[1]) : [];
+  const fav = ctl[0], who = fav ? fav[0] : null;
+  const head = d.mode === "replay" ? `Repetición: ${esc(cfg.title||"Senado")}`
+    : d.mode === "previa" ? (fav ? `${esc(who)}, ${fav[1] > .65 ? "favoritos" : "levemente favoritos"} para controlar el Senado` : "El Senado, antes de la noche")
+    : fav ? `${esc(who)} ${fav[1] > .95 ? "controlarían" : fav[1] > .75 ? "encaminados a controlar" : "con ventaja para controlar"} el Senado` : "Senado: primeros resultados";
+  const sub = d.mode === "replay" ? (d.replay_sub||"")
+    : d.mode === "previa" ? `Pronóstico de antes de que haya votos contados, armado sólo con las calificaciones de ${esc(cfg.ratings_source||"Cook Political Report")} y un error común a todas las carreras. Desde el cierre de los comicios, el 3 de noviembre, la página pasa sola a proyectar con el escrutinio.`
+    : `Proyección de cada carrera con ${pct(f.counted)} de los votos esperados ya escrutados, combinada con las calificaciones de Cook donde todavía se contó poco. No es un resultado oficial.`;
+  const upd = f.ts && /\d{4}-/.test(f.ts) ? `Actualizado ${new Date(f.ts).toLocaleString("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} · ` : "";
+  return `<div class="kicker">${pill}<span>${esc(e.name)} · ${esc(e.office)} · ${fecha(e.date)}</span></div>
+    <h1 class="hed">${head}</h1><p class="dek">${sub}</p>
+    ${d.mode === "previa" ? "" : `<p class="meta">${upd}${pct(f.counted)} de los votos esperados escrutados · ${num(f.units[0])} de ${num(f.units[1])} ${esc(cfg.unit_label)} con datos</p>`}`;
+}
+function senateBoard(cfg,C,f,d){
+  const S = cfg.seats || {total:100, fijas:{}}, r = f.rule, rp = f.rule_point || {};
+  const D = "Demócratas", R = "Republicanos", cD = cfg.colors[D], cR = cfg.colors[R], cI = cfg.colors.Osborn || "#6b8e23";
+  const fd = S.fijas[D]||0, fr = S.fijas[R]||0;
+  const sd = rp["bancas_"+D] != null ? rp["bancas_"+D] : fd, sr = rp["bancas_"+R] != null ? rp["bancas_"+R] : fr, si = rp.bancas_Independientes || 0;
+  const seg = (n, col, t, title) => n > 0 ? `<div style="width:${n/S.total*100}%;background:${tint(col,t)}" title="${esc(title)}"></div>` : "";
+  const bar = seg(fd, cD, 1, `${fd} demócratas que no se renuevan`) + seg(sd-fd, cD, .55, `${sd-fd} demócratas proyectados`)
+    + seg(si, cI, .8, "Osborn (independiente)") + `<div style="flex:1"></div>`
+    + seg(sr-fr, cR, .55, `${sr-fr} republicanos proyectados`) + seg(fr, cR, 1, `${fr} republicanos que no se renuevan`);
+  const ctl = r && r.control ? Object.entries(r.control).sort((a,b)=>b[1]-a[1]) : [];
+  const col = n => n === D ? cD : n === R ? cR : "var(--ink)";
+  const iv = k => r && r[k] ? `${Math.round(r[k].lo)}–${Math.round(r[k].hi)}` : "";
+  const ga = r && typeof r.balotaje_GA === "number" && r.balotaje_GA > .02 ? `<div class="line"><span>Georgia va a segunda vuelta (nadie pasa el 50%)</span><strong>${pct(r.balotaje_GA,0)}</strong></div>` : "";
+  const truth = d.truth && d.truth.text ? `<div class="note">${esc(d.truth.text)}</div>` : "";
+  return `<div><div class="tops"><div class="top1"><div class="nm">Demócratas</div><div class="pc" style="color:${cD}">${sd}</div><div class="ci">${r?`${iv("bancas_"+D)} bancas`:"bancas"}</div></div>
+      ${si?`<div class="top1" style="text-align:center"><div class="nm">Osborn</div><div class="pc" style="color:${cI}">${si}</div><div class="ci">independiente</div></div>`:""}
+      <div class="top1 r"><div class="nm">Republicanos</div><div class="pc" style="color:${cR}">${sr}</div><div class="ci">${r?`${iv("bancas_"+R)} bancas`:"bancas"}</div></div></div>
+      <div class="stack" role="img" aria-label="Bancas proyectadas del Senado">${bar}<span class="mid"></span></div>
+      <div class="stackcap"><span>${fd} no se renuevan</span><span>50</span><span>${fr} no se renuevan</span></div>
+      <p class="mline">Los tonos claros son las ${S.total - fd - fr} bancas en juego, asignadas al favorito de cada carrera; el número grande es esa cuenta y debajo va el rango del 90% de las simulaciones. ${esc(S.desempate)} ${S.desempate===R?"necesitan 50 (desempata el vicepresidente)":"necesitan 50 (desempata la vicepresidenta)"}; ${S.desempate===R?D:R}, 51.</p></div>
+    <div class="outcome"><h2>Control del Senado</h2>
+      ${ctl.length?`<div class="big"><span style="color:${col(ctl[0][0])}">${esc(ctl[0][0])}</span> ${pct(ctl[0][1],0)}</div>`:`<p class="note">Todavía hay muy pocos condados escrutados para simular escenarios.</p>`}
+      ${ctl.map(([k,p])=>`<div class="line"><span>${k.startsWith("Depende")||k.startsWith("Sin")?esc(k):"Controlan los "+esc(k.toLowerCase())}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+      ${ga}${truth}<div class="note">${esc(cfg.note||"")}</div></div>`;
+}
+function racesView(d,cfg,f){
+  const D = "Demócratas", R = "Republicanos", cD = cfg.colors[D], cR = cfg.colors[R];
+  const g = mapId(d) ? STATE.geo[mapId(d)] : null, N = cfg.race_names || {}, rt = cfg.ratings || {};
+  const rows = d.regions.map((reg,i) => {
+    const P = raceP(f, reg), pR = P ? (P[R]||0) : null, pD = P ? 1 - pR : null;
+    const pr = f.regions.proj[i], C = Object.keys(cfg.candidates), m = pr ? pr[C.indexOf(D)] - pr[C.indexOf(R)] : 0;
+    return {reg, i, pD, m, cnt: f.regions.counted[i], rating: rt[reg]||"", solid: /^Solid/.test(rt[reg]||"")};
+  });
+  const live = r => r.pD != null && r.pD > .02 && r.pD < .98;
+  let key = rows.filter(r => !r.solid || live(r));
+  key.sort((a,b) => Math.abs((a.pD??.5)-.5) - Math.abs((b.pD??.5)-.5) || RATING_ORDER.indexOf(a.rating) - RATING_ORDER.indexOf(b.rating));
+  const rest = rows.filter(r => !key.includes(r)).sort((a,b) => a.m - b.m);
+  const shown = STATE.allRaces ? key.concat(rest) : key;
+  const tw = d.truth && d.truth.winners;
+  const nm = (reg, side) => N[reg] && N[reg][side] ? esc(N[reg][side]) : side === D ? "Demócrata" : "Republicano";
+  const row = r => { const pD = r.pD;
+    const dn = nm(r.reg, D), rn = nm(r.reg, R);
+    const res = tw ? `<span class="won" style="color:${tw[r.reg]===D?cD:cR}">Ganó ${tw[r.reg]===D?dn:rn}</span>` : "";
+    return `<div class="race"><div class="rh"><button class="lnk" type="button" data-r="${esc(r.reg)}">${esc(regName(g, r.reg.split("-")[0]))}${r.reg.endsWith("-E")?" (especial)":""}</button>${ratingChip(cfg, r.reg)}${res}</div>
+      <div class="rc"><span style="color:${cD}">${dn}</span><span style="color:${cR}">${rn}</span></div>
+      ${pD==null?`<div class="pbar"><div style="width:100%;background:var(--nodata)"></div></div><div class="rs"><span>Sin simulaciones todavía</span></div>`:
+      `<div class="pbar" role="img" aria-label="Probabilidad de ganar: ${dn} ${pct(pD,0)}, ${rn} ${pct(1-pD,0)}"><div style="width:${pD*100}%;background:${cD}"></div><div style="width:${(1-pD)*100}%;background:${cR}"></div><span class="mid"></span></div>
+      <div class="rs"><span><strong style="color:${cD}">${pct(pD,0)}</strong></span><span>${d.mode==="previa"?"margen esperado":"margen proyectado"} ${r.m>=0?`D ${pts(r.m)}`:`R ${pts(-r.m)}`}${d.mode!=="previa"?` · ${pct(r.cnt,0)} escrutado`:""}</span><span><strong style="color:${cR}">${pct(1-pD,0)}</strong></span></div>`}</div>`; };
+  return `<h2 class="sec">Las carreras que deciden el Senado</h2>
+    <p class="secdek">Probabilidad de ganar de cada candidato${d.mode==="previa"?" según la calificación de Cook":", según el escrutinio y, donde todavía se contó poco, la calificación de Cook"}. Primero las más parejas. La etiqueta es la calificación de ${esc(cfg.ratings_source||"Cook Political Report")}.</p>
+    <div class="races">${shown.map(row).join("")}</div>
+    ${rest.length?`<button class="more" id="moreraces" type="button">${STATE.allRaces?"Sólo las disputadas":`Ver las ${rows.length} carreras`}</button>`:""}`;
 }
 
 /* ---------------- gráfico de la noche */

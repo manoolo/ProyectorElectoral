@@ -82,6 +82,29 @@ La calibración se traslada mejor entre elecciones: los factores de 2020 y 2024 
 
 o como shares ya promediados (el formato anterior).
 
+## Métodos tomados de Cook Political Report
+
+Cook no publica un modelo de escrutinio: publica el **PVI** (inclinación partidaria de cada estado y distrito) y **calificaciones** de cada carrera (Solid, Likely, Lean, Toss Up), con su historial de aciertos. Las dos cosas se probaron con el Senado 2022, re-escrutado condado por condado con la presidencial 2020 como base (`backtest_senado.py`, 13 carreras disputadas, 6 órdenes de llegada).
+
+- **Calificaciones como prior por carrera** (`engine/ratings.py`). Cada calificación es una normal sobre el margen D-R, armada con el historial de Cook: el favorito gana el 97% de los Likely y el 94% de los Lean, y en los Toss Up los republicanos ganaron por 0,7 puntos en promedio. En la noche se combina, carrera por carrera, con lo que dicen las simulaciones del escrutinio (actualización normal-normal). Donde todavía se contó poco pesa la calificación, y a medida que se cuenta pesa el escrutinio. El intervalo se corre pero no se achica, porque el prior y el escrutinio miran el mismo ambiente nacional y no son independientes: achicándolo, el 90% cubría el 70%. Se activa con `"ratings"` en la config (`config/us_senado.json`).
+- **Base estilo PVI** (`adapters/us_mid.py`, `pvi=True`): mezcla 75/25 de las dos últimas presidenciales en lugar de la última sola. **No se usa**, porque en el backtest empeoró un poco (error al 5% escrutado de 3,51 a 3,69 puntos).
+- **API de Cook** (`adapters/cook.py`): baja las calificaciones con una cuenta con acceso a la API y actualiza la config. Sin credenciales, quedan las que están cargadas a mano.
+
+**Resultados en el Senado 2022** (margen D-R por carrera disputada; sin → con calificaciones):
+
+| | Sin | Con |
+|---|---|---|
+| Error medio del margen con 5% escrutado | 3,51 | 2,93 |
+| Error medio del margen con 10% escrutado | 3,04 | 2,65 |
+| Error medio del margen con 50% escrutado | 1,94 | 1,76 |
+| Brier del ganador de cada carrera | 0,074 | 0,066 |
+| Cobertura del 90%, carreras sin terminar de contar | 87% | 91% |
+| Probabilidad media del control real (demócratas) con 5% escrutado | 60% | 49% |
+
+Mejora cada carrera por separado, pero empeora la probabilidad del control. En 2022 las calificaciones se equivocaron todas para el mismo lado (los demócratas ganaron casi todos los Toss Up), y el prior arrastra ese error común. Es el mismo problema que el de las encuestas. La diferencia es que acá la ganancia por carrera es clara, y en el Senado disputado importan las carreras. Las calificaciones de 2022 son una reconstrucción: Wisconsin Lean R el 4/11 está confirmado, y el resto sale de las notas de esos días.
+
+**La previa.** Antes de que haya votos, `python senado.py previa` arma el pronóstico sólo con las calificaciones, con un error nacional común de 3 puntos (t de Student). Con las del 20/10/2026, los republicanos controlan el Senado en el 59% de las simulaciones.
+
 ## Qué cambió (análisis del corrimiento)
 
 Inspirado en el análisis de El Atlas sobre Brasil 2026 ("comparando los mismos municipios"), `engine/analysis.py` calcula, sólo sobre las unidades ya escrutadas y frente a la elección base:
