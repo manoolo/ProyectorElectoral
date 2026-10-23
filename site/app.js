@@ -137,7 +137,7 @@ function header(e,d,f,cfg,C,order){
   const lead = C[order[0]], mg = f.margin;
   const pill = d.mode === "replay" ? `<span class="pill replay">Repetición</span>` : `<span class="pill live">En vivo</span>`;
   const head = d.mode === "replay"
-    ? `Repetición: ${esc(e.name)} ${e.year}`
+    ? `Repetición: ${esc(/\d{4}/.test(cfg.title||"") ? cfg.title : `${e.name} ${e.year}`)}`
     : `${esc(lead)} ${mg && mg.p_a_ahead>0.95 ? "está proyectado adelante" : "va levemente arriba"} en ${esc(e.name)}`;
   const sub = d.mode === "replay"
     ? (d.replay_sub || `Reproduce el escrutinio de 2024 condado por condado, con la base 2020, en el orden aproximado de cierre por huso horario. Mové el control para ver qué decía la proyección en cada momento.`)
@@ -598,12 +598,14 @@ async function init(){
   let rz, lw = innerWidth; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (innerWidth !== lw) { lw = innerWidth; update(); } }, 150); });
   if (!window.__DATA__) setInterval(async () => {
     const e = election(); if (!e || e.status === "replay") return;
+    // una elección en vivo se sigue pidiendo aunque por ahora muestre la repetición: cuando
+    // run_live.py escribe el primer corte, la página pasa sola al modo en vivo
     const old = STATE.data[e.id];
-    if (old && old.mode !== "live") return;
     const d = await getJSON(e.data); if (!d) return;
+    if (old && d.mode !== "live") return;
     const atEnd = !old || STATE.idx[e.id] === old.history.length-1;
     STATE.data[e.id] = d; delete STATE.cache[e.id];
-    if (!old) { render(); return; }
+    if (!old || old.mode !== d.mode) { STATE.idx[e.id] = d.history.length-1; render(); return; }
     if (atEnd) STATE.idx[e.id] = d.history.length-1;
     if ($("#slider")) $("#slider").max = d.history.length-1;
     update();
