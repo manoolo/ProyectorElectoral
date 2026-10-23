@@ -46,6 +46,14 @@ def argentina():
     return lambda V, C, regions: _two_round(V, C, lambda a, b: a >= 0.45 or (a >= 0.40 and a - b >= 0.10))
 
 
+def segunda_vuelta():
+    """Balotaje: gana quien tiene más votos válidos."""
+    def rule(V, C, regions):
+        tot = V.sum(0)
+        return {"ganador": C[int(np.argmax(tot))]}
+    return rule
+
+
 RULES = {"us_ec_2024": lambda: us_electoral_college(EV_2024),
          "us_ec_2012": lambda: us_electoral_college(EV_2012),
-         "brasil": brasil, "argentina": argentina}
+         "brasil": brasil, "brasil_2t": segunda_vuelta, "argentina": argentina}

@@ -124,12 +124,12 @@ footer{border-top:1px solid var(--rule);padding:16px 0 40px;color:var(--muted);f
 <script>
 // Configuración base por país (se usa si no hay datos todavía)
 const CONFIGS = {
-  br:{country:"br",title:"Brasil",office:"Presidente, 1ª vuelta",candidates:{"Lula":"lula","Flávio Bolsonaro":"bolsonaro","Augusto Cury":"otros","Renan Santos":"otros","Otros":"otros"},
-      colors:{"Lula":"#c8323a","Flávio Bolsonaro":"#1f4e9c","Augusto Cury":"#c99a1e","Renan Santos":"#6b4fa0","Otros":"#8a8f98"},rule_kind:"two_round",region_label:"Estado",unit_label:"municipios",
-      note:"Gana en primera vuelta quien supera el 50% de los votos válidos. Base: 1ª vuelta 2022.",
-      setup:["En tu computadora, corré <code>python backtest_pais.py br</code>: baja del TSE los resultados 2018 y 2022 por municipio, valida el método en 2022 y genera esta pestaña.",
-             "Corré <code>python -m adapters.br 2022</code> para dejar lista la base de 2026.",
-             "Durante el escrutinio: <code>python -m adapters.br_live data/br_actual.csv</code> y después <code>python run_live.py br data/br_actual.csv</code>, cada 2 o 3 minutos. Probá antes el conversor con <code>--uf RR</code>."]},
+  br:{country:"br",title:"Brasil",office:"Presidente, 2ª vuelta",candidates:{"Lula":"lula","Flávio Bolsonaro":"bolsonaro"},
+      colors:{"Lula":"#c8323a","Flávio Bolsonaro":"#1f4e9c"},rule_kind:"runoff",region_label:"Estado",unit_label:"municipios",
+      note:"Segunda vuelta: gana quien tiene más votos válidos. Base: 1ª vuelta 2026, municipio por municipio.",
+      setup:["Bajá la 1ª vuelta 2026 por municipio: <code>python -m adapters.br_live data/br_1t_2026.csv --turno 1 --config br_1t</code>.",
+             "Armá la base del balotaje: <code>python -m adapters.br base2t data/br_1t_2026.csv</code>.",
+             "Durante el escrutinio: <code>python en_vivo.py br --turno 2</code>."]},
   us:{country:"us",title:"Estados Unidos",office:"Presidente",rule_kind:"ec"},
   ar:{country:"ar",title:"Argentina",office:"Presidente, primera vuelta",candidates:{"La Libertad Avanza":"lla","Peronismo":"peronismo","Juntos por el Cambio":"jxc","Otros":"otros"},
       colors:{"La Libertad Avanza":"#6b3fa0","Peronismo":"#2a8fd6","Juntos por el Cambio":"#e0b21b","Otros":"#8a8f98"},rule_kind:"two_round",region_label:"Provincia",unit_label:"circuitos",
@@ -233,6 +233,14 @@ function outcome(cfg,C,f,d){
       ${evs.map(o=>`<div class="line"><span>${esc(o.n)}</span><span>${Math.round(o.v.lo)}–${Math.round(o.v.hi)} votos electorales</span></div>`).join("")}
       ${winners.map(([n,p])=>`<div class="line"><span>${n==="sin mayoría"?"Nadie llega a 270":"Gana "+esc(n)}</span><strong>${pct(p,0)}</strong></div>`).join("")}
       ${d.truth&&d.truth.ev?`<div class="note">Resultado real: Trump 312, Harris 226.</div>`:""}
+      <div class="note">${esc(cfg.note||"")}</div></div>`;
+  }
+  if (cfg.rule_kind === "runoff") {
+    const w = Object.entries(r.ganador||{}).sort((a,b)=>b[1]-a[1]);
+    return `<div class="outcome"><h2>¿Quién gana?</h2>
+      ${w.length?`<div class="big"><span style="color:${cfg.colors[w[0][0]]||"inherit"}">${esc(w[0][0])}</span> ${pct(w[0][1],0)}</div>`:""}
+      ${w.map(([k,p])=>`<div class="line"><span>Gana ${esc(k)}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+      ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
       <div class="note">${esc(cfg.note||"")}</div></div>`;
   }
   const res = Object.entries(r.resultado||{}).sort((a,b)=>b[1]-a[1]);
@@ -372,7 +380,7 @@ function methodViewOther(d){
   ${bt.methods.map(m=>`<tr><td>${names[m]}</td>${show.map((k,j)=>{const v=bt.mae[m][k];return `<td class="${m!=="crudo"&&Math.abs(v-best[j])<1e-9?"best":""}">${v.toFixed(2).replace(".",",")}</td>`;}).join("")}<td>${ok(m)}</td></tr>`).join("")}
   </tbody></table></div>
   ${d.country === "ar" ? `<p>Para 2027 hace falta la base 2023 por mesa de la DINE (<code>python -m adapters.ar archivo.csv</code>), el mapeo de frentes cuando se oficialicen las listas y el feed del escrutinio provisorio (<code>adapters/ar_live.py</code>).</p>` : ""}
-  <p>"Escenario correcto" es la proporción de cortes en que el método anticipaba bien si había o no segunda vuelta. Con la calibración traída de Estados Unidos, el intervalo del 90% contuvo el margen real el ${pct(bt.coverage_global,0)} de las veces. Para la noche electoral, este país usa un promedio de esa calibración y la que surge de su propio backtest.</p>
+  <p>"Escenario correcto" es la proporción de cortes en que el método anticipaba bien ${(d.config||{}).rule_kind==="runoff"?"al ganador":"si había o no segunda vuelta"}. Con la calibración traída de Estados Unidos, el intervalo del 90% contuvo el margen real el ${pct(bt.coverage_global,0)} de las veces. Para la noche electoral, este país usa un promedio de esa calibración y la que surge de su propio backtest.</p>
   </section>`;
 }
 

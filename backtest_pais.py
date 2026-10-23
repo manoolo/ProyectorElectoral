@@ -2,7 +2,7 @@
 repetición de su última elección para la página.
 
   python backtest_pais.py ar      # Argentina 2015→2019 (datos de electorAr, se bajan solos)
-  python backtest_pais.py br      # Brasil 2018→2022 (baja los zips del TSE; correr en tu máquina)
+  python backtest_pais.py br      # Brasil 2022, 1ª → 2ª vuelta (baja el zip del TSE; correr en tu máquina)
 """
 import sys, json, time
 import numpy as np, pandas as pd
@@ -18,12 +18,13 @@ PAISES = {
                colors={"Fernández": "#2a8fd6", "Macri": "#e0b21b", "Otros": "#8a8f98"},
                sub="Reproduce el escrutinio provisorio de 2019 circuito por circuito, con la base 2015, en un orden de llegada simulado con sesgo. Mové el control para ver qué decía la proyección en cada momento.",
                truth_text="Resultado real: Fernández ganó en primera vuelta con 48,2%."),
-    "br": dict(load=lambda: __import__("adapters.br", fromlist=["x"]).pair(2018, 2022),
-               groups=["lula", "bolsonaro", "otros"], rule="brasil", title="Brasil 2022",
-               names={"lula": "Lula", "bolsonaro": "Bolsonaro", "otros": "Otros"},
-               colors={"Lula": "#c8323a", "Bolsonaro": "#1f4e9c", "Otros": "#8a8f98"},
-               sub="Reproduce la primera vuelta de 2022 municipio por municipio, con la base 2018 (Haddad como base de Lula), en un orden de llegada simulado con sesgo.",
-               truth_text="Resultado real: Lula 48,4%, Bolsonaro 43,2%; hubo segunda vuelta."),
+    # balotaje: base = 1ª vuelta, objetivo = 2ª vuelta del mismo año (lo que importa para 2026)
+    "br": dict(load=lambda: __import__("adapters.br", fromlist=["x"]).pair_turnos(2022),
+               groups=["lula", "bolsonaro"], rule="brasil_2t", title="Brasil 2022, 2ª vuelta",
+               names={"lula": "Lula", "bolsonaro": "Bolsonaro"},
+               colors={"Lula": "#c8323a", "Bolsonaro": "#1f4e9c"},
+               sub="Reproduce la segunda vuelta de 2022 municipio por municipio, con la primera vuelta como base, en un orden de llegada simulado con sesgo.",
+               truth_text="Resultado real: Lula 50,9%, Bolsonaro 49,1%."),
 }
 
 
@@ -65,7 +66,7 @@ def main(c):
         out = project(base, cur, cand_map, P, rule)
         hist.append(frame(out, f"paso {k + 1}"))
     T = t[G].sum()
-    cfg = json.load(open(f"config/{c}.json"))
+    cfg = json.load(open(f"config/{c}.json", encoding="utf-8"))
     doc = dict(country=c, mode="replay",
                config=dict(cfg, candidates=cand_map, colors=spec["colors"], title=spec["title"]),
                regions=out["regions"], history=hist, calib=us["calib"], replay_sub=spec["sub"],

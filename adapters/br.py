@@ -79,6 +79,36 @@ def from_tse(path, turno=1):
                          "lula": piv.get("lula", 0), "bolsonaro": piv.get("bolsonaro", 0), "otros": piv.get("otros", 0)})
 
 
+GROUPS_2T = ["lula", "bolsonaro"]
+
+
+def pair_turnos(year: int = 2022):
+    """Base = 1er turno, objetivo = 2º turno del mismo año, por municipio (para el backtest del balotaje).
+    Sólo los dos finalistas: el cambio que se modela es el de su reparto y el de la participación."""
+    z = descargar(year)
+    b, t = from_tse(z, 1), from_tse(z, 2)
+    common = set(b.unit) & set(t.unit)
+    b, t = b[b.unit.isin(common)].reset_index(drop=True), t[t.unit.isin(common)].reset_index(drop=True)
+    t = t[["unit", *GROUPS_2T]].copy(); t["frac"] = 1.0
+    return b.drop(columns="otros"), t
+
+
+def base_2t(primera_vuelta_csv, salida=DATA / "br_base_2t.csv"):
+    """Base para el balotaje 2026: el 1er turno 2026 por municipio (bajado con
+    `python -m adapters.br_live data/br_1t_2026.csv --turno 1`) con región y coordenadas de br_base.csv."""
+    cur = pd.read_csv(primera_vuelta_csv, dtype={"unit": str})
+    geo = pd.read_csv(DATA / "br_base.csv", dtype={"unit": str})[["unit", "region", "lat", "lon"]]
+    b = cur.merge(geo, on="unit", how="inner")
+    if len(b) < 0.95 * len(cur):
+        print(f"aviso: sólo {len(b)} de {len(cur)} municipios cruzaron con br_base.csv")
+    if (cur["frac"] < 0.999).any():
+        print(f"aviso: {(cur['frac'] < 0.999).sum()} municipios no estaban escrutados al 100%")
+    out = pd.DataFrame({"unit": b.unit, "region": b.region, "lat": b.lat, "lon": b.lon,
+                        "lula": b["Lula"], "bolsonaro": b["Flávio Bolsonaro"]})
+    out.to_csv(salida, index=False)
+    print(f"{len(out)} municipios → {salida} (Lula {out.lula.sum():,.0f}, Flávio {out.bolsonaro.sum():,.0f})")
+
+
 def pair(base_year: int = 2018, target_year: int = 2022):
     """Base y resultado final por municipio (1er turno), con los zips del TSE en data/."""
     b = from_tse(descargar(base_year))
@@ -92,8 +122,11 @@ def pair(base_year: int = 2018, target_year: int = 2022):
 if __name__ == "__main__":
     # python -m adapters.br 2022            baja el zip del TSE y arma data/br_base.csv
     # python -m adapters.br archivo.csv      usa un archivo ya bajado (TSE o gist del G1)
+    # python -m adapters.br base2t data/br_1t_2026.csv   arma data/br_base_2t.csv para el balotaje
     import sys
     arg = sys.argv[1] if len(sys.argv) > 1 else "2022"
+    if arg == "base2t":
+        base_2t(sys.argv[2]); sys.exit()
     if arg.isdigit():
         base = from_tse(descargar(int(arg)))
     else:

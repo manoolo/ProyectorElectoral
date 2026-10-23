@@ -17,14 +17,14 @@ SPEC = {
                rule="us_ec_2024", order="huso", seed=5, params="config/params_us.json"),
     "ar": dict(load=lambda: __import__("adapters.ar", fromlist=["x"]).pair(2015, 2019), groups=["peronismo", "jxc", "otros"],
                rule="argentina", order="sesgado", seed=8, params="config/params_us.json"),
-    "br": dict(load=lambda: __import__("adapters.br", fromlist=["x"]).pair(2018, 2022), groups=["lula", "bolsonaro", "otros"],
-               rule="brasil", order="sesgado", seed=8, params="config/params_us.json"),
+    "br": dict(load=lambda: __import__("adapters.br", fromlist=["x"]).pair_turnos(2022), groups=["lula", "bolsonaro"],
+               rule="brasil_2t", order="sesgado", seed=8, params="config/params_us.json"),
 }
 
 
 def main(c):
     sp = SPEC[c]
-    doc = json.load(open(f"site/data/{c}.json"))
+    doc = json.load(open(f"site/data/{c}.json", encoding="utf-8"))
     b, t = sp["load"]()
     base = Base(b, sp["groups"])
     pars = {k: v for k, v in json.load(open(sp["params"])).items() if k != "calib"}
@@ -43,7 +43,7 @@ def main(c):
                                  scatter=500 if (k % 4 == 3 or k == len(cuts) - 1) else 0)
         hist.append(fr)
     doc["history"] = hist
-    json.dump(doc, open(f"site/data/{c}.json", "w"), ensure_ascii=False, separators=(",", ":"))
+    json.dump(doc, open(f"site/data/{c}.json", "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     a = hist[-1]["analysis"]
     print(c, "margen", a["a"], "−", a["b"], f"cambio {a['margin_delta']*100:+.1f} pts;",
           {k: round(v["delta"] * 100, 1) for k, v in a["change"].items()})

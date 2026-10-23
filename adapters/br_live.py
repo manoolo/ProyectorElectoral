@@ -108,8 +108,9 @@ def resultado(cli, ciclo, eleicao, uf, mu):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("salida"); ap.add_argument("--uf", nargs="+"); ap.add_argument("--turno", type=int, default=1)
+    ap.add_argument("--config", default="br", help="config/<nombre>.json (br = la elección configurada; br_1t = la 1ª vuelta)")
     a = ap.parse_args()
-    cfg = json.loads((ROOT / "config" / "br.json").read_text())
+    cfg = json.loads((ROOT / "config" / f"{a.config}.json").read_text(encoding="utf-8"))
     cli = Cliente()
     ciclo, pleito, eleicao = descubrir(cli, 2026, a.turno)
     mus = municipios(cli, ciclo, pleito, [u.lower() for u in (a.uf or UFS)])
@@ -123,7 +124,8 @@ def main():
         row = dict(unit=tse2ibge.get(mu.lstrip("0"), "tse" + mu.lstrip("0")), frac=frac, **{c: 0.0 for c in cands})
         for nome, v in votos.items():
             dest = next((c for k, c in cfg["live_names"].items() if k in nome), "Otros")
-            row[dest] += v
+            if dest in row:                      # en el balotaje no hay "Otros"
+                row[dest] += v
         rows.append(row)
     pd.DataFrame(rows).to_csv(a.salida, index=False)
     tot = sum(sum(r[c] for c in cands) for r in rows)

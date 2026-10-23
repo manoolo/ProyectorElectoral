@@ -1,44 +1,30 @@
 {
  "country": "br",
  "title": "Brasil",
- "office": "Presidente, 1ª vuelta",
+ "office": "Presidente, 2ª vuelta",
  "groups": [
   "lula",
-  "bolsonaro",
-  "otros"
+  "bolsonaro"
  ],
  "candidates": {
   "Lula": "lula",
-  "Flávio Bolsonaro": "bolsonaro",
-  "Augusto Cury": "otros",
-  "Renan Santos": "otros",
-  "Otros": "otros"
+  "Flávio Bolsonaro": "bolsonaro"
  },
  "colors": {
   "Lula": "#c8323a",
-  "Flávio Bolsonaro": "#1f4e9c",
-  "Augusto Cury": "#c99a1e",
-  "Renan Santos": "#6b4fa0",
-  "Otros": "#8a8f98"
+  "Flávio Bolsonaro": "#1f4e9c"
  },
- "rule": "brasil",
- "rule_kind": "two_round",
+ "rule": "brasil_2t",
+ "rule_kind": "runoff",
  "region_label": "Estado",
  "unit_label": "municipios",
- "base": "data/br_base.csv",
+ "base": "data/br_base_2t.csv",
  "params": "config/params_br.json",
- "note": "Gana en primera vuelta quien supera el 50% de los votos válidos. Base: 1ª vuelta 2022 (Flávio hereda la base de Jair; los candidatos nuevos, la de 'otros').",
+ "note": "Segunda vuelta: gana quien tiene más votos válidos. Base: 1ª vuelta 2026, municipio por municipio.",
  "calibrated": false,
  "live_names": {
   "LULA": "Lula",
   "FLÁVIO": "Flávio Bolsonaro",
-  "FLAVIO": "Flávio Bolsonaro",
-  "CURY": "Augusto Cury",
-  "RENAN": "Renan Santos"
- },
- "polls": {
-  "Lula": 0.028,
-  "Flávio Bolsonaro": 0.0,
-  "_source": "promedio de encuestas de El Atlas en la víspera; sólo importa la diferencia"
+  "FLAVIO": "Flávio Bolsonaro"
  }
 }

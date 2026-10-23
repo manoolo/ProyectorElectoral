@@ -122,6 +122,19 @@ python backtest_pais.py br                # Brasil 2018→2022 (baja los zips de
 python build_demo.py                      # página con datos incrustados, para publicar sin servidor
 ```
 
+### Balotaje en Brasil (2ª vuelta)
+
+`config/br.json` está armado para la segunda vuelta: sólo Lula y Flávio, regla "gana quien tiene más votos" y, como base, la **primera vuelta 2026 municipio por municipio** (el mejor punto de partida: mismos candidatos y mismo año). La configuración de la primera vuelta quedó en `config/br_1t.json`.
+
+```bash
+python -m adapters.br_live data/br_1t_2026.csv --turno 1 --config br_1t   # 1ª vuelta 2026 completa (una vez)
+python -m adapters.br base2t data/br_1t_2026.csv                         # → data/br_base_2t.csv
+python backtest_pais.py br                                               # valida con 2022: 1ª → 2ª vuelta
+python en_vivo.py br --turno 2                                           # la noche del balotaje
+```
+
+El backtest de Brasil re-escruta la segunda vuelta de 2022 con la primera como base, y deja `config/params_br.json` con la calibración propia.
+
 ### Noche electoral en Brasil
 
 ```bash
