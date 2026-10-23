@@ -5,6 +5,7 @@
   python en_vivo.py br --cada 180      # otro intervalo, en segundos
   python en_vivo.py br --turno 2       # Brasil, segunda vuelta
   python en_vivo.py br --sin-subir     # sólo actualiza site/data, sin git (para probar)
+  python en_vivo.py us_senado          # EEUU, Senado (feed del NYT: "live_url" en config/us_senado.json)
 
 Cada vuelta actualiza site/data/<país>.json y lo sube a GitHub. GitHub Pages publica el
 cambio en uno o dos minutos y la página abierta se refresca sola cada 2 minutos.
@@ -28,6 +29,8 @@ def vuelta(pais, parcial, subir, turno):
     actual = ROOT / "data" / f"{pais}_actual.csv"
     if pais == "br":
         ok = sh(PY, "-m", "adapters.br_live", actual, "--turno", turno)
+    elif pais.startswith("us_"):
+        ok = sh(PY, "-m", "adapters.us_live", actual, "--config", pais)
     elif pais == "ar":
         ok = sh(PY, "-m", "adapters.ar_live", parcial, actual)
     else:
@@ -47,7 +50,7 @@ def vuelta(pais, parcial, subir, turno):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("pais", choices=["br", "ar"])
+    ap.add_argument("pais", choices=["br", "ar", "us_senado"])
     ap.add_argument("parcial", nargs="?", help="Argentina: CSV del escrutinio provisorio")
     ap.add_argument("--cada", type=int, default=120, help="segundos entre vueltas")
     ap.add_argument("--turno", type=int, default=1, help="Brasil: 1 o 2")
