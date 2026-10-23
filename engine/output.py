@@ -28,7 +28,7 @@ def unit_keys(units, unit_key):
 
 def geo_index(base, cfg: dict) -> dict | None:
     """Índice unidad del modelo → unidad de mapa, y el resultado de la base por unidad de mapa
-    (para el mapa de corrimientos). Se arma una vez por corrida."""
+    y sus votos válidos (para el mapa de corrimientos y la comparación con la elección anterior). Se arma una vez por corrida."""
     g = cfg.get("geo")
     if not g:
         return None
@@ -38,7 +38,8 @@ def geo_index(base, cfg: dict) -> dict | None:
     np.add.at(V, inv, base.df[base.groups].to_numpy(float))
     sh = V / np.maximum(V.sum(1, keepdims=True), 1)
     return dict(ids=ids.tolist(), inv=inv, n=len(ids),
-                doc=dict(map=g["map"], ids=ids.tolist(), groups=base.groups, base=pm(sh)))
+                doc=dict(map=g["map"], ids=ids.tolist(), groups=base.groups, base=pm(sh),
+                         bv=np.rint(V.sum(1)).astype(int).tolist()))
 
 
 def map_frame(out: dict, geo: dict) -> dict:
