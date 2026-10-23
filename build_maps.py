@@ -117,7 +117,27 @@ def prep_ar():
     return feats, names, dict(proj="+proj=tmerc +lon_0=-65 +datum=WGS84", lo=6, hi=20, unit="Departamento")
 
 
-PREP = dict(us=prep_us, br=prep_br, ar=prep_ar)
+def prep_es():
+    """Municipios de es-atlas (IGN, códigos INE). Canarias se acerca a la península (como en los
+    mapas electorales españoles) y Ceuta y Melilla se agrandan. Quedan afuera los territorios compartidos (53xxx, 54xxx) sin votantes."""
+    sys.path.insert(0, str(ROOT))
+    from adapters.es import PROV, atlas, topo_features
+    feats = []
+    for f in topo_features(atlas(), "municipalities"):
+        u = f["properties"]["id"]
+        if u[:2] not in PROV:
+            continue
+        if u[:2] in ("35", "38"):                 # Canarias: +7,5° de longitud, +6,8° de latitud (debajo de Andalucía)
+            f["geometry"]["coordinates"] = [[[[x + 7.5, y + 6.8] for x, y in r] for r in p] for p in f["geometry"]["coordinates"]]
+        if u[:2] in ("51", "52"):                 # Ceuta y Melilla, agrandadas 5 veces para poder tocarlas
+            r0 = f["geometry"]["coordinates"][0][0]
+            cx, cy = sum(x for x, _ in r0) / len(r0), sum(y for _, y in r0) / len(r0)
+            f["geometry"]["coordinates"] = [[[[cx + 5 * (x - cx), cy + 5 * (y - cy)] for x, y in r] for r in p] for p in f["geometry"]["coordinates"]]
+        feats.append(dict(f, properties=dict(id=u, r=u[:2], n=f["properties"].get("name") or u)))
+    return feats, dict(PROV), dict(proj="+proj=lcc +lat_1=37 +lat_2=43 +lon_0=-3.5 +datum=WGS84", lo=3, hi=14, unit="Municipio")
+
+
+PREP = dict(us=prep_us, br=prep_br, ar=prep_ar, es=prep_es)
 
 
 def mapshaper(args):

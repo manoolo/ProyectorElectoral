@@ -34,7 +34,7 @@ def main(country, current_path):
         polls["_source"] = cfg["polls"]["_source"]
     if polls and cfg.get("polls_prior"):
         params["polls"] = polls          # prior opcional: ver engine/polls.py y el README
-    out = project(base, cur, cfg["candidates"], params, RULES[cfg["rule"]]())
+    out = project(base, cur, cfg["candidates"], params, RULES[cfg["rule"]](**cfg.get("rule_args", {})))
     path = ROOT / "site" / "data" / f"{country}.json"
     doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     if doc.get("mode") != "live":                     # había una repetición: la noche arranca de cero

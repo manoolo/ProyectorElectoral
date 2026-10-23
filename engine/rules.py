@@ -54,6 +54,59 @@ def segunda_vuelta():
     return rule
 
 
+# Congreso de los Diputados, 29/11/2026 (Real Decreto 806/2026): igual que 2023 salvo Madrid 38 (+1) y Cádiz 8 (−1).
+# Clave: código INE de la provincia (Ceuta 51 y Melilla 52 eligen un diputado cada una).
+ES_SEATS_2023 = {"01": 4, "02": 4, "03": 12, "04": 6, "05": 3, "06": 5, "07": 8, "08": 32, "09": 4, "10": 4, "11": 9,
+                 "12": 5, "13": 5, "14": 6, "15": 8, "16": 3, "17": 6, "18": 7, "19": 3, "20": 6, "21": 5, "22": 3,
+                 "23": 5, "24": 4, "25": 4, "26": 4, "27": 4, "28": 37, "29": 11, "30": 10, "31": 5, "32": 4, "33": 7,
+                 "34": 3, "35": 8, "36": 7, "37": 4, "38": 7, "39": 5, "40": 3, "41": 12, "42": 2, "43": 6, "44": 3,
+                 "45": 6, "46": 16, "47": 5, "48": 8, "49": 3, "50": 7, "51": 1, "52": 1}
+ES_SEATS_2026 = dict(ES_SEATS_2023, **{"28": 38, "11": 8})
+assert sum(ES_SEATS_2023.values()) == 350 and sum(ES_SEATS_2026.values()) == 350
+
+
+def dhondt_seats(votes, seats, threshold=0.0, valid=None):
+    """D'Hondt en una circunscripción: votos por lista -> escaños por lista. Las listas por debajo
+    del umbral (fracción de `valid`, que en España incluye el voto en blanco) no entran al reparto.
+    Empates: gana la lista con más votos (art. 163 LOREG; el sorteo no se modela)."""
+    v = np.asarray(votes, float)
+    tot = v.sum() if valid is None else valid
+    ok = v >= threshold * tot
+    q = (v[ok][:, None] / np.arange(1, seats + 1)[None]).ravel()
+    who = np.repeat(np.flatnonzero(ok), seats)
+    out = np.zeros(len(v), int)
+    if seats and len(q):
+        top = np.lexsort((-v[who], -q))[:seats]
+        np.add.at(out, who[top], 1)
+    return out
+
+
+def espana_congreso(seats=ES_SEATS_2026, threshold=0.03, blank=0.0126, majority=176, blocs=None, no_seats=("Otros",), bloc_labels=None):
+    """Congreso: D'Hondt por provincia con umbral del 3% de los votos válidos (art. 163 LOREG).
+    Los válidos incluyen el voto en blanco, que el modelo no proyecta: se suma como una fracción
+    fija `blank` (1,26% en 2023). "Otros" agrupa listas chicas y no recibe escaños.
+    `blocs`: {nombre: [listas]} → probabilidad de que cada bloque sume `majority`; `bloc_labels` es para la página."""
+    blocs = blocs or {}
+    def rule(V, C, regions):
+        elig = np.array([c not in no_seats for c in C])
+        tally = np.zeros(len(C), int)
+        by = {}
+        for r, reg in enumerate(regions):
+            v = np.where(elig, V[r], 0.0)
+            s = dhondt_seats(v, seats.get(reg, 0), threshold, valid=V[r].sum() / (1 - blank))
+            tally += s
+            by[reg] = s.tolist()
+        out = {f"esc_{c}": int(tally[i]) for i, c in enumerate(C) if elig[i]}
+        for name, members in blocs.items():
+            out[f"may_{name}"] = bool(sum(tally[C.index(m)] for m in members if m in C) >= majority)
+        out["primero"] = C[int(np.argmax(tally))]
+        out["por_region"] = by            # sólo en el punto central (summarize ignora listas/dicts)
+        return out
+    return rule
+
+
 RULES = {"us_ec_2024": lambda: us_electoral_college(EV_2024),
          "us_ec_2012": lambda: us_electoral_college(EV_2012),
-         "brasil": brasil, "brasil_2t": segunda_vuelta, "argentina": argentina}
+         "brasil": brasil, "brasil_2t": segunda_vuelta, "argentina": argentina,
+         "espana_congreso": espana_congreso,
+         "espana_congreso_2023": lambda **kw: espana_congreso(**{"seats": ES_SEATS_2023, **kw})}

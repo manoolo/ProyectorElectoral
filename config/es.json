@@ -1,0 +1,49 @@
+{
+ "country": "es",
+ "title": "España",
+ "office": "Congreso de los Diputados",
+ "groups": ["pp", "psoe", "vox", "sumar", "erc", "junts", "bildu", "pnv", "bng", "cc", "upn", "otros"],
+ "candidates": {
+  "PP": "pp",
+  "PSOE": "psoe",
+  "Vox": "vox",
+  "Sumar": "sumar",
+  "Podemos": "sumar",
+  "ERC": "erc",
+  "Junts": "junts",
+  "EH Bildu": "bildu",
+  "PNV": "pnv",
+  "BNG": "bng",
+  "CC": "cc",
+  "UPN": "upn",
+  "Otros": "otros"
+ },
+ "colors": {
+  "PP": "#1f6fc5", "PSOE": "#e2231a", "Vox": "#5bb031", "Sumar": "#e5007d", "Podemos": "#6b2a74",
+  "ERC": "#f2a900", "Junts": "#1fb5ad", "EH Bildu": "#0b8a7a", "PNV": "#2e6b30", "BNG": "#7fb6e0",
+  "CC": "#e8c800", "UPN": "#1b3f8b", "Otros": "#8a8f98"
+ },
+ "rule": "espana_congreso",
+ "rule_kind": "seats",
+ "rule_args": {
+  "majority": 176,
+  "blocs": {
+   "derecha": ["PP", "Vox", "UPN"],
+   "investidura": ["PSOE", "Sumar", "Podemos", "ERC", "Junts", "EH Bildu", "PNV", "BNG", "CC"],
+   "izquierda_sin_junts": ["PSOE", "Sumar", "Podemos", "ERC", "EH Bildu", "PNV", "BNG"]
+  },
+  "bloc_labels": {
+   "derecha": "PP + Vox + UPN",
+   "investidura": "PSOE y los socios de la investidura de 2023 (con Junts y CC)",
+   "izquierda_sin_junts": "PSOE y sus socios sin Junts ni CC"
+  }
+ },
+ "seats_total": 350,
+ "region_label": "Provincia",
+ "unit_label": "municipios",
+ "base": "data/es_base.csv",
+ "params": "config/params_es.json",
+ "note": "350 diputados en 52 circunscripciones (50 provincias, Ceuta y Melilla), repartidos por D'Hondt en cada provincia entre las listas con al menos 3% de los votos válidos. Mayoría absoluta: 176. Base: generales de 2023, municipio por municipio. Sumar y Podemos heredan juntos el voto de Sumar 2023; el reparto entre ambos sale del escrutinio.",
+ "calibrated": false,
+ "geo": {"map": "es", "unit_key": null}
+}
