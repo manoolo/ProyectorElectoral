@@ -16,6 +16,8 @@ async function getJSON(url){ try { const r = await fetch(url,{cache:"no-store"})
 
 /* ---------------- registro y menú */
 const election = () => STATE.reg.elections.find(e => e.id === STATE.eid);
+// carpeta del mapa: la del JSON (config.geo.map) o la del registro; sin resultados por unidad igual se dibuja por región
+const mapId = d => (d.config.geo && d.config.geo.map) || (election() || {}).map;
 
 function route(){
   const h = decodeURIComponent(location.hash.slice(1)), E = STATE.reg.elections;
@@ -103,7 +105,7 @@ async function render(){
   document.title = `${e.name} ${e.year}: ${e.office} · Proyector electoral`;
   if (!d) { app.innerHTML = emptyView(e); return; }
   STATE.region = null; STATE.uq = ""; STATE.showAll = false;
-  const hasMap = !!(d.geo && d.config.geo);
+  const hasMap = !!mapId(d);
   app.innerHTML = `<div id="hdr"></div><div id="board" class="board"></div>
     ${d.history.length>1?`<div class="sticky"><div class="scrub" id="scrub"></div></div>`:""}
     ${hasMap?`<section id="mapsec"><h2 class="sec">Mapa de resultados</h2><div class="maptools"><div class="crumbs" id="crumbs"></div><div class="seg" id="modes" role="group" aria-label="Qué muestra el mapa"></div></div>
@@ -176,13 +178,13 @@ function scrubber(d){
 const MODES = [["conteo","Quién lidera"],["corrimiento","Corrimiento"],["proy","Proyección"],["escrutado","Escrutado"]];
 
 function tools(d,cfg,C,order){
-  const g = STATE.geo[cfg.geo.map];
+  const g = STATE.geo[mapId(d)];
   const rname = STATE.region ? regName(g, STATE.region) : null;
   $("#crumbs").innerHTML = STATE.region
     ? `<button type="button" id="back">${esc(election().name)}</button><span aria-hidden="true">›</span><strong>${esc(rname)}</strong>`
     : `<span style="color:var(--muted)">Tocá ${art(cfg.region_label)} ${esc(cfg.region_label.toLowerCase())} para ver sus ${esc(unitPl(g,cfg))}.</span>`;
   const b = $("#back"); if (b) b.onclick = () => setRegion(null);
-  const a = order[0], bb = order[1], G = d.geo.groups, ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[bb]]);
+  const a = order[0], bb = order[1], G = d.geo ? d.geo.groups : [], ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[bb]]);
   const can = {corrimiento: ga >= 0 && gb >= 0 && ga !== gb, proy: !STATE.region};
   if (can[STATE.mode] === false) STATE.mode = "conteo";
   $("#modes").innerHTML = MODES.filter(([k]) => can[k] !== false).map(([k,l]) => `<button type="button" data-m="${k}" aria-pressed="${STATE.mode===k}">${l}</button>`).join("");
@@ -193,7 +195,7 @@ const regName = (g, r) => { const x = g && g.regions.find(o => o.id === r); retu
 function unitPl(g,cfg){ const u = (g && g.unit) || "Unidad"; return {Condado:"condados",Municipio:"municipios",Departamento:"departamentos"}[u] || cfg.unit_label; }
 
 async function buildMap(){
-  const e = election(), d = STATE.data[e.id], c = d.config.geo.map, box = $("#mapbox");
+  const e = election(), d = STATE.data[e.id], c = mapId(d), box = $("#mapbox");
   const g = await geoNational(c);
   if (!g) { box.innerHTML = `<p class="loading">No se encontró el mapa (site/geo/${esc(c)}.json). Corré <code>python build_maps.py ${esc(c)}</code>.</p>`; return; }
   let units = g.units, vb = [0,0,g.w,g.h], regs = g.regions;
@@ -207,7 +209,9 @@ async function buildMap(){
   const s = mapState(d, STATE.idx[e.id]);
   STATE.units = units.map(u => ({...u, k: s ? s.pos.get(u.id) : undefined}));
   STATE.vb = vb;
-  const lab = !STATE.region && g.w > 0 ? regs.filter(r => r.c && r.bb[2]-r.bb[0] > g.w*.06).map(r => `<text class="rl" x="${r.c[0]}" y="${r.c[1]}" text-anchor="middle">${esc(r.id.length<=3?r.id:"")}</text>`).join("") : "";
+  // nombres completos de las regiones, donde entran (un carácter ≈ 6,3 unidades del mapa)
+  const fits = r => r.c && (r.bb[2]-r.bb[0]) > r.n.length*6.3 + 8 && (r.bb[3]-r.bb[1]) > 16;
+  const lab = !STATE.region ? regs.filter(fits).map(r => `<text class="rl" x="${r.c[0]}" y="${r.c[1]+4}" text-anchor="middle">${esc(r.n)}</text>`).join("") : "";
   box.className = "mapbox" + (STATE.region ? " detail" : "");
   box.innerHTML = `<svg viewBox="${vb.map(v=>v.toFixed(1)).join(" ")}" role="img" aria-label="Mapa de ${esc(STATE.region?regName(g,STATE.region):e.name)} por ${esc((g.unit||"unidad").toLowerCase())}">
     <g id="gu">${STATE.units.map((u,j) => `<path class="u" d="${u.d}" data-j="${j}"/>`).join("")}</g>
@@ -238,7 +242,7 @@ function paint(){
   const s = mapState(d, STATE.idx[e.id]), order = C.map((n,i)=>i).sort((a,b)=>f.proj[b]-f.proj[a]);
   const a = order[0], b = order[1], NC = C.length, mode = STATE.mode;
   const col = C.map(n => cfg.colors[n] || "#8a8f98");
-  const G = d.geo.groups, ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[b]]), NG = G.length;
+  const G = d.geo ? d.geo.groups : [], ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[b]]), NG = G.length;
   const ridx = new Map(d.regions.map((r,i) => [r,i]));
   const box = $("#mapbox"); box.classList.toggle("proy", mode === "proy");
   const regFill = r => {           // proyección por región: líder e intensidad según la probabilidad
@@ -254,7 +258,10 @@ function paint(){
     let fill = "var(--nodata)";
     const has = s && k != null && s.has[k];
     if (mode === "proy") fill = regFill(u.r);
-    else if (mode === "escrutado") { if (has) fill = tint("#3d3d3d", .12 + .88 * s.F[k]/1000); }
+    else if (mode === "escrutado") {
+      if (has) fill = tint("#3d3d3d", .12 + .88 * s.F[k]/1000);
+      else if (!s || k == null) { const i = ridx.get(u.r); if (i != null && f.regions.counted[i] > 0) fill = tint("#3d3d3d", .12 + .88 * f.regions.counted[i]); }
+    }
     else if (has) {
       const v = s.V.subarray(k*NC, k*NC+NC);
       if (mode === "conteo") {
@@ -266,7 +273,7 @@ function paint(){
         const base = d.geo.base[k], sh = (v[a] - v[b]) - (base[ga] - base[gb]);
         if (u.c && Math.abs(sh) >= 5) arrows.push([u.c, sh]);
       }
-    } else if (mode === "conteo" && s && k == null) {      // sin unidad propia en el escrutinio: el conteo de su región
+    } else if (mode === "conteo" && (!s || k == null)) {      // sin unidad propia en el escrutinio: el conteo de su región
       const i = ridx.get(u.r);
       if (i != null && f.regions.counted[i] > 0) {
         const v = f.regions.crude[i]; let L = 0, S = -1;
@@ -291,7 +298,8 @@ function paint(){
 function legend(cfg,C,col,a,b,s,leaders){
   const m = STATE.mode, el = $("#mlegend"); if (!el) return;
   const ramp = i => `<span class="ramp"><b>${esc(C[i])}</b>${BINS.map(x => `<i style="background:${tint(col[i],x[1])}"></i>`).join("")}</span>`;
-  const note = s && !s.any ? `<span>El mapa por ${esc(((STATE.geo[cfg.geo.map]||{}).unit||"unidad").toLowerCase())} está disponible para el último corte.</span>` : "";
+  const uu = esc(((STATE.geo[mapId(STATE.data[STATE.eid])]||{}).unit||"unidad").toLowerCase());
+  const note = !s ? `<span>Estos datos no traen resultados por ${uu}: se muestra cada región según su conteo.</span>` : !s.any ? `<span>El mapa por ${uu} está disponible para el último corte.</span>` : "";
   if (m === "conteo") {
     const shown = C.map((n,i)=>i).filter(i => i === a || i === b || leaders.has(i));
     el.innerHTML = shown.map(ramp).join("") + `<span>Ventaja en el voto contado: menos de 5, 5 a 10, 10 a 20 y más de 20 puntos</span><span class="ramp"><i style="background:var(--nodata)"></i>Sin datos todavía</span>${note}`;
@@ -312,7 +320,7 @@ function tipAt(ev, pinned){
   if (!p) { tipHide(); return; }
   p.classList.add("on");
   const e = election(), d = STATE.data[e.id], cfg = d.config, C = Object.keys(cfg.candidates), f = d.history[STATE.idx[e.id]];
-  const u = STATE.units[+p.dataset.j], s = mapState(d, STATE.idx[e.id]), g = STATE.geo[cfg.geo.map];
+  const u = STATE.units[+p.dataset.j], s = mapState(d, STATE.idx[e.id]), g = STATE.geo[mapId(d)];
   let body;
   if (STATE.mode === "proy") {
     const i = d.regions.indexOf(u.r), pr = i >= 0 ? f.regions.proj[i] : null;
@@ -342,7 +350,7 @@ function tipHide(){ $("#tip").hidden = true; STATE.paths && STATE.paths.forEach(
 
 /* ---------------- tablas */
 function regionsView(d,cfg,C,f,order){
-  const a = order[0], b = order[1], R = d.regions, g = d.config.geo ? STATE.geo[d.config.geo.map] : null, drill = !!(g && d.geo);
+  const a = order[0], b = order[1], R = d.regions, g = mapId(d) ? STATE.geo[mapId(d)] : null, drill = !!g;
   let rows = R.map((id,r)=>({id, name:regName(g,id), cnt:f.regions.counted[r], p:f.regions.proj[r], v:f.regions.votes[r], pa:f.regions.p_ahead?f.regions.p_ahead[r]:null}));
   const key = {close:o=>Math.abs(o.p[a]-o.p[b]), votes:o=>-o.v, counted:o=>o.cnt, name:o=>o.name}[STATE.sort];
   rows.sort((x,y)=> STATE.sort==="name" ? x.name.localeCompare(y.name) : key(x)-key(y));
@@ -361,7 +369,7 @@ function regionsView(d,cfg,C,f,order){
 }
 
 function unitsTable(d,cfg,C,f,order){
-  const a = order[0], b = order[1], g = STATE.geo[cfg.geo.map], s = mapState(d, STATE.idx[STATE.eid]), NC = C.length;
+  const a = order[0], b = order[1], g = STATE.geo[mapId(d)], s = mapState(d, STATE.idx[STATE.eid]), NC = C.length;
   const label = (g && g.unit) || "Unidad", q = norm(STATE.uq);
   let rows = (STATE.units || []).filter(u => u.r === STATE.region).map(u => {
     const has = s && u.k != null && s.has[u.k], v = has ? Array.from(s.V.subarray(u.k*NC, u.k*NC+NC)) : null;
@@ -467,7 +475,7 @@ function changesView(d,cfg,f){
   const ca = cfg.colors[A.a], cb = cfg.colors[A.b], md = A.margin_delta, toward = md >= 0 ? A.a : A.b;
   const u = esc(cfg.unit_label||"unidades"), rl = esc((cfg.region_label||"región").toLowerCase());
   const art = /[aá]$|ón$/.test(rl) ? "La" : "El";
-  const g = cfg.geo ? STATE.geo[cfg.geo.map] : null;
+  const g = mapId(d) ? STATE.geo[mapId(d)] : null;
   const chg = Object.entries(A.change).filter(([n,v]) => Math.abs(v.delta) > 0.001 || v.now > 0.02);
   const lead = `Comparando los mismos ${A.units.toLocaleString("es-AR")} ${u} ya escrutados con la elección anterior, la diferencia entre ${esc(A.a)} y ${esc(A.b)} se movió <strong>${Math.abs(md*100).toFixed(1).replace(".",",")} puntos hacia ${esc(toward)}</strong>.`;
   const cards = chg.map(([n,v]) => `<div class="card"><div class="k">${esc(n)}${v.shared_group?" (grupo)":""}</div>
