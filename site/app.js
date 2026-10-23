@@ -18,6 +18,37 @@ async function getJSON(url){ try { const r = await fetch(url,{cache:"no-store"})
 const election = () => STATE.reg.elections.find(e => e.id === STATE.eid);
 // carpeta del mapa: la del JSON (config.geo.map) o la del registro; sin resultados por unidad igual se dibuja por región
 const mapId = d => (d.config.geo && d.config.geo.map) || (election() || {}).map;
+const baseLabel = d => (election() || {}).base_label || d.config.base_label || "la elección anterior";
+
+// Elección anterior (la base del modelo), desde d.geo: reparto por grupo en cada unidad de mapa y,
+// con los votos de cada unidad (bv), el total por región y nacional. Los grupos se nombran y
+// pintan como el candidato que los hereda; si dos candidatos comparten grupo, va el nombre del grupo.
+function prevInfo(d){
+  if (!d.geo) return null;
+  if (d._prev) return d._prev;
+  const cfg = d.config, C = Object.keys(cfg.candidates), G = d.geo.groups;
+  const heirs = G.map(g => C.filter(c => cfg.candidates[c] === g));
+  const name = G.map((g,i) => heirs[i].length === 1 ? heirs[i][0] : g.charAt(0).toUpperCase() + g.slice(1));
+  const color = G.map((g,i) => heirs[i].length ? cfg.colors[heirs[i][0]] : "#8a8f98");
+  const P = {G, name, color, region:null, nat:null};
+  const g = STATE.geo[mapId(d)];
+  if (d.geo.bv && g) {
+    const reg = new Map(g.units.map(u => [u.id, u.r])), agg = {}, nat = new Array(G.length).fill(0);
+    d.geo.ids.forEach((id,i) => { const r = reg.get(id); if (!r) return;
+      const v = d.geo.bv[i], t = agg[r] || (agg[r] = new Array(G.length).fill(0));
+      d.geo.base[i].forEach((x,j) => { t[j] += v*x/1000; nat[j] += v*x/1000; }); });
+    const sh = t => { const s = t.reduce((a,b)=>a+b,0) || 1; return t.map(x => x/s); };
+    P.region = Object.fromEntries(Object.entries(agg).map(([r,t]) => [r, sh(t)])); P.nat = sh(nat);
+    d._prev = P;                    // sólo se guarda cuando ya está la geometría
+  }
+  return P;
+}
+// diferencia a − b en la elección anterior, según los grupos que heredan (null si comparten grupo)
+function prevMargin(d, sh, a, b){
+  const cfg = d.config, C = Object.keys(cfg.candidates), G = d.geo.groups;
+  const ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[b]]);
+  return ga < 0 || gb < 0 || ga === gb || !sh ? null : sh[ga] - sh[gb];
+}
 
 function route(){
   const h = decodeURIComponent(location.hash.slice(1)), E = STATE.reg.elections;
@@ -156,13 +187,21 @@ function board(cfg,C,f,d,order){
   const mid = cfg.rule_kind === "runoff" || cfg.rule === "brasil";
   const stack = order.map(i => `<div style="width:${f.proj[i]*100}%;background:${cfg.colors[C[i]]}" title="${esc(C[i])} ${pct(f.proj[i])}"></div>`).join("");
   const rows = order.map(i => `<div class="row"><span><span class="sw" style="background:${cfg.colors[C[i]]}"></span>${esc(C[i])}</span>
-      <span>${pct(f.proj[i])} <span style="color:var(--muted)">proy. · ${pct(f.crude[i])} contado${d.truth?` · final ${pct(d.truth.shares[i])}`:""}</span></span></div>`).join("");
+      <span>${pct(f.proj[i])} <span style="color:var(--muted)">proy. · ${pct(f.crude[i])} contado${d.truth?` · final ${pct(d.truth.shares[i])}`:""}${prevShare(d,C,i)}</span></span></div>`).join("");
   return `<div><div class="tops">${top(a,false)}${top(b,true)}</div>
       <div class="stack" role="img" aria-label="Reparto proyectado del voto">${stack}${mid?`<span class="mid"></span>`:""}</div>
       <div class="stackcap"><span>Proyección del total</span>${mid?`<span>50%</span>`:""}</div>
       <div class="others">${rows}</div>
       ${mg ? `<p class="mline">Diferencia proyectada: ${esc(mg.a)} ${pts(mg.mid)} pts sobre ${esc(mg.b)} (${pts(mg.lo)} a ${pts(mg.hi)}). Probabilidad de que ${esc(mg.a)} termine adelante: ${pct(mg.p_a_ahead,0)}.</p>`:""}</div>
     ${outcome(cfg,C,f,d)}`;
+}
+
+// lo que sacó el candidato (su grupo) en la elección anterior, si no comparte grupo con otro
+function prevShare(d,C,i){
+  const PV = prevInfo(d); if (!PV || !PV.nat) return "";
+  const g = d.config.candidates[C[i]], j = PV.G.indexOf(g);
+  if (j < 0 || C.filter(c => d.config.candidates[c] === g).length !== 1) return "";
+  return ` · ${esc(baseLabel(d))} ${pct(PV.nat[j])}`;
 }
 
 function scrubber(d){
@@ -175,7 +214,7 @@ function scrubber(d){
 }
 
 /* ---------------- mapa */
-const MODES = [["conteo","Quién lidera"],["corrimiento","Corrimiento"],["proy","Proyección"],["escrutado","Escrutado"]];
+const MODES = [["conteo","Quién lidera"],["corrimiento","Corrimiento"],["proy","Proyección"],["escrutado","Escrutado"],["antes","Antes"]];
 
 function tools(d,cfg,C,order){
   const g = STATE.geo[mapId(d)];
@@ -185,7 +224,7 @@ function tools(d,cfg,C,order){
     : `<span style="color:var(--muted)">Tocá ${art(cfg.region_label)} ${esc(cfg.region_label.toLowerCase())} para ver sus ${esc(unitPl(g,cfg))}.</span>`;
   const b = $("#back"); if (b) b.onclick = () => setRegion(null);
   const a = order[0], bb = order[1], G = d.geo ? d.geo.groups : [], ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[bb]]);
-  const can = {corrimiento: ga >= 0 && gb >= 0 && ga !== gb, proy: !STATE.region};
+  const can = {corrimiento: ga >= 0 && gb >= 0 && ga !== gb, proy: !STATE.region, antes: !!d.geo};
   if (can[STATE.mode] === false) STATE.mode = "conteo";
   $("#modes").innerHTML = MODES.filter(([k]) => can[k] !== false).map(([k,l]) => `<button type="button" data-m="${k}" aria-pressed="${STATE.mode===k}">${l}</button>`).join("");
   $("#modes").querySelectorAll("button").forEach(x => x.onclick = () => { STATE.mode = x.dataset.m; update(); });
@@ -245,6 +284,7 @@ function paint(){
   const G = d.geo ? d.geo.groups : [], ga = G.indexOf(cfg.candidates[C[a]]), gb = G.indexOf(cfg.candidates[C[b]]), NG = G.length;
   const ridx = new Map(d.regions.map((r,i) => [r,i]));
   const box = $("#mapbox"); box.classList.toggle("proy", mode === "proy");
+  const PV = prevInfo(d);
   const regFill = r => {           // proyección por región: líder e intensidad según la probabilidad
     const i = ridx.get(r); if (i == null) return "var(--nodata)";
     const p = f.regions.proj[i]; let L = 0; p.forEach((v,k) => { if (v > p[L]) L = k; });
@@ -258,6 +298,11 @@ function paint(){
     let fill = "var(--nodata)";
     const has = s && k != null && s.has[k];
     if (mode === "proy") fill = regFill(u.r);
+    else if (mode === "antes") {
+      if (k != null) { const bs = d.geo.base[k]; let L = 0, S = -1;
+        bs.forEach((x,j) => { if (x > bs[L]) L = j; }); bs.forEach((x,j) => { if (j !== L && (S < 0 || x > bs[S])) S = j; });
+        fill = tint(PV.color[L], binT(bs[L] - (S < 0 ? 0 : bs[S]))); leaders.add(L); }
+    }
     else if (mode === "escrutado") {
       if (has) fill = tint("#3d3d3d", .12 + .88 * s.F[k]/1000);
       else if (!s || k == null) { const i = ridx.get(u.r); if (i != null && f.regions.counted[i] > 0) fill = tint("#3d3d3d", .12 + .88 * f.regions.counted[i]); }
@@ -306,6 +351,10 @@ function legend(cfg,C,col,a,b,s,leaders){
   } else if (m === "corrimiento") {
     const arr = (c, dir) => `<svg viewBox="0 0 24 16" width="24" height="16"><path d="M${dir>0?4:20} 14L${dir>0?16:8} 3M${dir>0?10:14} 3L${dir>0?16:8} 3L${dir>0?16:8} 9" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"/></svg>`;
     el.innerHTML = `<span>${arr(col[a],1)} Más ${esc(C[a])} que en la elección anterior</span><span>${arr(col[b],-1)} Más ${esc(C[b])}</span><span>El largo indica cuántos puntos se movió la diferencia (tope: 25 puntos).</span>${note}`;
+  } else if (m === "antes") {
+    const PV = prevInfo(STATE.data[STATE.eid]);
+    el.innerHTML = [...leaders].map(i => `<span class="ramp"><b>${esc(PV.name[i])}</b>${BINS.map(x => `<i style="background:${tint(PV.color[i],x[1])}"></i>`).join("")}</span>`).join("")
+      + `<span>Resultado de ${esc(baseLabel(STATE.data[STATE.eid]))}, la base con la que se compara: ventaja de menos de 5, 5 a 10, 10 a 20 y más de 20 puntos</span>`;
   } else if (m === "proy") {
     el.innerHTML = [a,b].map(i => `<span class="ramp"><b>${esc(C[i])}</b>${[.38,.6,1].map(t => `<i style="background:${tint(col[i],t)}"></i>`).join("")}</span>`).join("") + `<span>Probabilidad de ganar la región: menos de 80%, 80 a 95% y más de 95%, según la proyección.</span>`;
   } else {
@@ -322,7 +371,11 @@ function tipAt(ev, pinned){
   const e = election(), d = STATE.data[e.id], cfg = d.config, C = Object.keys(cfg.candidates), f = d.history[STATE.idx[e.id]];
   const u = STATE.units[+p.dataset.j], s = mapState(d, STATE.idx[e.id]), g = STATE.geo[mapId(d)];
   let body;
-  if (STATE.mode === "proy") {
+  if (STATE.mode === "antes") {
+    const PV = prevInfo(d), bs = u.k != null ? d.geo.base[u.k] : null;
+    body = bs ? `<table>${PV.G.map((x,j)=>[j,bs[j]]).sort((x,y)=>y[1]-x[1]).map(([j,v]) => `<tr><td><span class="sw" style="background:${PV.color[j]}"></span>${esc(PV.name[j])}</td><td>${pct(v/1000)}</td></tr>`).join("")}</table>
+      <div class="hint">${esc(baseLabel(d))}${d.geo.bv?` · ${num(d.geo.bv[u.k])} votos válidos`:""}</div>` : `<div class="hint">Sin datos de ${esc(baseLabel(d))}.</div>`;
+  } else if (STATE.mode === "proy") {
     const i = d.regions.indexOf(u.r), pr = i >= 0 ? f.regions.proj[i] : null;
     body = pr ? `<table>${C.map((n,c)=>[n,pr[c]]).sort((x,y)=>y[1]-x[1]).map(([n,v]) => `<tr><td><span class="sw" style="background:${cfg.colors[n]}"></span>${esc(n)}</td><td>${pct(v)}</td></tr>`).join("")}</table>
       <div class="hint">Proyección para ${esc(regName(g,u.r))}; ${pct(f.regions.counted[i],0)} escrutado.</div>` : `<div class="hint">Sin datos.</div>`;
@@ -336,7 +389,7 @@ function tipAt(ev, pinned){
       extra = `<div class="hint">Diferencia ${esc(C[a])} − ${esc(C[b])}: ${pts(bm/1000)} antes → ${pts(nm/1000)} ahora.</div>`;
     }
     body = `<table>${rows.map(([n,x]) => `<tr><td><span class="sw" style="background:${cfg.colors[n]}"></span>${esc(n)}</td><td>${pct(x/1000)}</td></tr>`).join("")}</table>
-      <div class="hint">${pct(s.F[u.k]/1000,0)} escrutado${s.N[u.k]?` · ${num(s.N[u.k])} votos contados`:""}</div>${extra}`;
+      <div class="hint">${pct(s.F[u.k]/1000,0)} escrutado${s.N[u.k]?` · ${num(s.N[u.k])} votos contados`:""}</div>${extra || prevLine(d, v, u.k)}`;
   } else body = `<div class="hint">${u.k == null ? "Sin resultados propios en el escrutinio" : "Todavía sin votos contados"}.</div>`;
   const t = $("#tip");
   t.innerHTML = `<h3>${esc(u.n)}</h3><div class="sub">${esc(regName(g,u.r))}</div>${body}${!STATE.region?`<div class="hint">Clic para ver ${esc(regName(g,u.r))}.</div>`:""}`;
@@ -345,6 +398,12 @@ function tipAt(ev, pinned){
   t.style.left = Math.max(8, Math.min(innerWidth - W - 8, x + W > innerWidth ? ev.clientX - W - 14 : x)) + "px";
   t.style.top = Math.max(60, Math.min(innerHeight - H - 8, y + H > innerHeight ? ev.clientY - H - 14 : y)) + "px";
   if (pinned) { clearTimeout(STATE.tipT); STATE.tipT = setTimeout(tipHide, 5000); }
+}
+function prevLine(d, v, k){
+  if (!d.geo) return "";
+  const f = d.history[STATE.idx[STATE.eid]], C = Object.keys(d.config.candidates), o = C.map((n,i)=>i).sort((x,y)=>f.proj[y]-f.proj[x]);
+  const bm = prevMargin(d, d.geo.base[k], o[0], o[1]); if (bm == null) return "";
+  return `<div class="hint">Diferencia ${esc(C[o[0]])} − ${esc(C[o[1]])}: ${pts((v[o[0]]-v[o[1]])/1000)} ahora, ${pts(bm/1000)} en ${esc(baseLabel(d))}.</div>`;
 }
 function tipHide(){ $("#tip").hidden = true; STATE.paths && STATE.paths.forEach(x => x.classList.remove("on")); }
 
@@ -356,13 +415,15 @@ function regionsView(d,cfg,C,f,order){
   rows.sort((x,y)=> STATE.sort==="name" ? x.name.localeCompare(y.name) : key(x)-key(y));
   const shown = STATE.showAll ? rows : rows.slice(0,12);
   const ca = cfg.colors[C[a]], cb = cfg.colors[C[b]];
+  const PV = prevInfo(d), pm = r => PV && PV.region ? prevMargin(d, PV.region[r], a, b) : null, hasPrev = R.some(r => pm(r) != null);
   return `<h2 class="sec">Por ${esc(cfg.region_label.toLowerCase())}</h2>
   <div class="tools"><label for="sort">Ordenar por</label><select id="sort">
     ${[["close","más reñidos"],["votes","más votos"],["counted","menos escrutados"],["name","nombre"]].map(([k,l])=>`<option value="${k}" ${STATE.sort===k?"selected":""}>${l}</option>`).join("")}</select></div>
-  <div class="tablewrap"><table><thead><tr><th>${esc(cfg.region_label)}</th><th>Escrutado</th><th>${esc(C[a])}</th><th>${esc(C[b])}</th><th>Diferencia proyectada</th>${rows[0].pa!=null?`<th>P(${esc(C[a])} adelante)</th>`:""}</tr></thead><tbody>
+  <div class="tablewrap"><table><thead><tr><th>${esc(cfg.region_label)}</th><th>Escrutado</th><th>${esc(C[a])}</th><th>${esc(C[b])}</th><th>Diferencia proyectada</th>${hasPrev?`<th>En ${esc(baseLabel(d))}</th><th>Cambio</th>`:""}${rows[0].pa!=null?`<th>P(${esc(C[a])} adelante)</th>`:""}</tr></thead><tbody>
   ${shown.map(o=>{ const dm=o.p[a]-o.p[b], w=Math.min(50,Math.abs(dm)*250);
     return `<tr><td>${drill?`<button class="lnk" type="button" data-r="${esc(o.id)}">${esc(o.name)}</button>`:esc(o.name)}</td><td>${pct(o.cnt,0)}</td><td>${pct(o.p[a])}</td><td>${pct(o.p[b])}</td>
     <td>${pts(dm)}<span class="mbar"><span style="${dm>=0?`left:50%;width:${w}%;background:${ca}`:`right:50%;width:${w}%;background:${cb}`}"></span></span></td>
+    ${hasPrev?(()=>{ const bm = pm(o.id); return bm==null?`<td></td><td></td>`:`<td>${pts(bm)}</td><td style="color:${dm-bm>=0?ca:cb};font-weight:700">${pts(dm-bm)}</td>`; })():""}
     ${o.pa!=null?`<td>${pct(o.pa,0)}</td>`:""}</tr>`;}).join("")}
   </tbody></table></div>
   ${rows.length>12?`<button class="more" id="more" type="button">${STATE.showAll?"Mostrar menos":`Mostrar los ${rows.length}`}</button>`:""}`;
@@ -373,7 +434,7 @@ function unitsTable(d,cfg,C,f,order){
   const label = (g && g.unit) || "Unidad", q = norm(STATE.uq);
   let rows = (STATE.units || []).filter(u => u.r === STATE.region).map(u => {
     const has = s && u.k != null && s.has[u.k], v = has ? Array.from(s.V.subarray(u.k*NC, u.k*NC+NC)) : null;
-    return {n:u.n, has, f: has ? s.F[u.k]/1000 : 0, v, N: has ? s.N[u.k] : 0};
+    return {n:u.n, has, f: has ? s.F[u.k]/1000 : 0, v, N: has ? s.N[u.k] : 0, bm: d.geo && u.k != null ? prevMargin(d, d.geo.base[u.k], a, b) : null};
   });
   const total = rows.length;
   if (q) rows = rows.filter(r => norm(r.n).includes(q));
@@ -385,11 +446,12 @@ function unitsTable(d,cfg,C,f,order){
   <p class="secdek">Voto contado hasta ahora en cada ${esc(label.toLowerCase())}. La proyección se hace con todos juntos, no ${esc(label.toLowerCase()==="municipio"?"municipio por municipio":"uno por uno")}.</p>
   <div class="tools"><input id="uq" type="search" placeholder="Buscar ${esc(label.toLowerCase())}" aria-label="Buscar ${esc(label.toLowerCase())}" value="${esc(STATE.uq)}">
     <label for="usort">Ordenar por</label><select id="usort">${[["votes","más votos"],["close","más reñidos"],["counted","menos escrutados"],["name","nombre"]].map(([k,l])=>`<option value="${k}" ${STATE.usort===k?"selected":""}>${l}</option>`).join("")}</select></div>
-  <div class="tablewrap"><table><thead><tr><th>${esc(label)}</th><th>Escrutado</th><th>${esc(C[a])}</th><th>${esc(C[b])}</th><th>Diferencia</th><th>Votos contados</th></tr></thead><tbody>
-  ${shown.map(r => { if (!r.has) return `<tr><td>${esc(r.n)}</td><td>—</td><td></td><td></td><td></td><td></td></tr>`;
+  <div class="tablewrap"><table><thead><tr><th>${esc(label)}</th><th>Escrutado</th><th>${esc(C[a])}</th><th>${esc(C[b])}</th><th>Diferencia</th><th>En ${esc(baseLabel(d))}</th><th>Votos contados</th></tr></thead><tbody>
+  ${shown.map(r => { const prev = `<td>${r.bm==null?"—":pts(r.bm/1000)}</td>`;
+    if (!r.has) return `<tr><td>${esc(r.n)}</td><td>—</td><td></td><td></td><td></td>${prev}<td></td></tr>`;
     const dm = (r.v[a]-r.v[b])/1000, w = Math.min(50, Math.abs(dm)*100);
     return `<tr><td>${esc(r.n)}</td><td>${pct(r.f,0)}</td><td>${pct(r.v[a]/1000)}</td><td>${pct(r.v[b]/1000)}</td>
-      <td>${pts(dm)}<span class="mbar"><span style="${dm>=0?`left:50%;width:${w}%;background:${ca}`:`right:50%;width:${w}%;background:${cb}`}"></span></span></td><td>${r.N?num(r.N):"—"}</td></tr>`; }).join("")}
+      <td>${pts(dm)}<span class="mbar"><span style="${dm>=0?`left:50%;width:${w}%;background:${ca}`:`right:50%;width:${w}%;background:${cb}`}"></span></span></td>${prev}<td>${r.N?num(r.N):"—"}</td></tr>`; }).join("")}
   </tbody></table></div>
   ${!q && total>15?`<button class="more" id="more" type="button">${STATE.showAll?"Mostrar menos":`Mostrar los ${total}`}</button>`:""}`;
 }
