@@ -2,6 +2,7 @@
 
   python en_vivo.py br                 # Brasil, cada 2 minutos
   python en_vivo.py ar parcial.csv     # Argentina: el CSV del escrutinio provisorio que vas bajando
+  python en_vivo.py es parcial.csv     # España: ídem (ver adapters/es_live.py)
   python en_vivo.py br --cada 180      # otro intervalo, en segundos
   python en_vivo.py br --turno 2       # Brasil, segunda vuelta
   python en_vivo.py br --sin-subir     # sólo actualiza site/data, sin git (para probar)
@@ -31,8 +32,8 @@ def vuelta(pais, parcial, subir, turno):
         ok = sh(PY, "-m", "adapters.br_live", actual, "--turno", turno)
     elif pais.startswith("us_"):
         ok = sh(PY, "-m", "adapters.us_live", actual, "--config", pais)
-    elif pais == "ar":
-        ok = sh(PY, "-m", "adapters.ar_live", parcial, actual)
+    elif pais in ("ar", "es"):
+        ok = sh(PY, "-m", f"adapters.{pais}_live", parcial, actual)
     else:
         raise SystemExit(f"país sin feed en vivo: {pais}")
     if not ok or not sh(PY, "run_live.py", pais, actual):
@@ -50,14 +51,14 @@ def vuelta(pais, parcial, subir, turno):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("pais", choices=["br", "ar", "us_senado"])
-    ap.add_argument("parcial", nargs="?", help="Argentina: CSV del escrutinio provisorio")
+    ap.add_argument("pais", choices=["br", "ar", "es", "us_senado"])
+    ap.add_argument("parcial", nargs="?", help="Argentina y España: CSV del escrutinio provisorio")
     ap.add_argument("--cada", type=int, default=120, help="segundos entre vueltas")
     ap.add_argument("--turno", type=int, default=1, help="Brasil: 1 o 2")
     ap.add_argument("--sin-subir", action="store_true")
     a = ap.parse_args()
-    if a.pais == "ar" and not a.parcial:
-        ap.error("para Argentina pasá el CSV del escrutinio provisorio")
+    if a.pais in ("ar", "es") and not a.parcial:
+        ap.error("para Argentina y España pasá el CSV del escrutinio provisorio")
     if not a.sin_subir:
         sh("git", "pull", "-q", "--rebase")       # trae cambios del repo antes de empezar
     while True:

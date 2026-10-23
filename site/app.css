@@ -176,6 +176,10 @@ svg text{font-family:var(--sans);fill:var(--muted);font-size:12px}
 .loading{color:var(--muted);padding:40px 0}
 footer{border-top:1px solid var(--rule);padding:16px 0 40px;color:var(--muted);font-size:.8rem;margin-top:24px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.outcome .sub2{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:16px 0 2px}
+.outcome .line .sw{display:inline-block;width:10px;height:10px;margin-right:8px}
+.schip{display:inline-block;white-space:nowrap;font-size:.78rem;padding:1px 6px 1px 5px;border-left:4px solid var(--c);background:var(--nodata);margin:1px 0}
+td.seats{white-space:normal;text-align:left;min-width:200px;max-width:320px}
 
 /* Senado: carreras clave */
 .rating{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:2px;margin-left:8px;vertical-align:2px;white-space:nowrap}

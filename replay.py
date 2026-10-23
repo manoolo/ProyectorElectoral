@@ -19,6 +19,9 @@ SPEC = {
                rule="argentina", order="sesgado", seed=8, params="config/params_us.json"),
     "br": dict(load=lambda: __import__("adapters.br", fromlist=["x"]).pair_turnos(2022), groups=["lula", "bolsonaro"],
                rule="brasil_2t", order="sesgado", seed=8, params="config/params_us.json"),
+    "es": dict(load=lambda: __import__("adapters.es", fromlist=["x"]).pair_named(2019, 2023),
+               groups=["PP", "PSOE", "Vox", "Sumar", "ERC", "Junts", "EH Bildu", "PNV", "BNG", "CC", "UPN", "Otros"],
+               rule="espana_congreso_2023", order="sesgado", seed=8, params="config/params_us.json"),
 }
 
 
@@ -31,7 +34,7 @@ def main(c):
     P = dict(DEFAULTS, **pars, calib=doc["calib"], n_sims=400)
     cand_map = doc["config"]["candidates"]
     inv = {g: n for n, g in cand_map.items()}
-    rule = RULES[sp["rule"]]()
+    rule = RULES[sp["rule"]](**{k: v for k, v in doc["config"].get("rule_args", {}).items() if k != "bloc_labels"})
     cfg = json.load(open(f"config/{c}.json", encoding="utf-8"))
     geo = geo_index(base, cfg)
     if geo:

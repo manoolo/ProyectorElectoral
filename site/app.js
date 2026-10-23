@@ -422,18 +422,22 @@ function regionsView(d,cfg,C,f,order){
   const shown = STATE.showAll ? rows : rows.slice(0,12);
   const ca = cfg.colors[C[a]], cb = cfg.colors[C[b]];
   const PV = prevInfo(d), pm = r => PV && PV.region ? prevMargin(d, PV.region[r], a, b) : null, hasPrev = R.some(r => pm(r) != null);
-  return `<h2 class="sec">Por ${esc(cfg.region_label.toLowerCase())}</h2>
+  const seat = cfg.rule_kind === "seats" && f.rule_point && f.rule_point.por_region;
+  return `<h2 class="sec">Por ${esc(cfg.region_label.toLowerCase())}</h2>${seat?`<p class="secdek">Escaños: reparto D'Hondt con la proyección central de cada provincia.</p>`:""}
   <div class="tools"><label for="sort">Ordenar por</label><select id="sort">
     ${[["close","más reñidos"],["votes","más votos"],["counted","menos escrutados"],["name","nombre"]].map(([k,l])=>`<option value="${k}" ${STATE.sort===k?"selected":""}>${l}</option>`).join("")}</select></div>
-  <div class="tablewrap"><table><thead><tr><th>${esc(cfg.region_label)}</th><th>Escrutado</th><th>${esc(C[a])}</th><th>${esc(C[b])}</th><th>Diferencia proyectada</th>${hasPrev?`<th>En ${esc(baseLabel(d))}</th><th>Cambio</th>`:""}${rows[0].pa!=null?`<th>P(${esc(C[a])} adelante)</th>`:""}</tr></thead><tbody>
+  <div class="tablewrap"><table><thead><tr><th>${esc(cfg.region_label)}</th><th>Escrutado</th><th>${esc(C[a])}</th><th>${esc(C[b])}</th><th>Diferencia proyectada</th>${hasPrev?`<th>En ${esc(baseLabel(d))}</th><th>Cambio</th>`:""}${rows[0].pa!=null?`<th>P(${esc(C[a])} adelante)</th>`:""}${seat?"<th>Escaños</th>":""}</tr></thead><tbody>
   ${shown.map(o=>{ const dm=o.p[a]-o.p[b], w=Math.min(50,Math.abs(dm)*250);
     return `<tr><td>${drill?`<button class="lnk" type="button" data-r="${esc(o.id)}">${esc(o.name)}</button>`:esc(o.name)}</td><td>${pct(o.cnt,0)}</td><td>${pct(o.p[a])}</td><td>${pct(o.p[b])}</td>
     <td>${pts(dm)}<span class="mbar"><span style="${dm>=0?`left:50%;width:${w}%;background:${ca}`:`right:50%;width:${w}%;background:${cb}`}"></span></span></td>
     ${hasPrev?(()=>{ const bm = pm(o.id); return bm==null?`<td></td><td></td>`:`<td>${pts(bm)}</td><td style="color:${dm-bm>=0?ca:cb};font-weight:700">${pts(dm-bm)}</td>`; })():""}
-    ${o.pa!=null?`<td>${pct(o.pa,0)}</td>`:""}</tr>`;}).join("")}
+    ${o.pa!=null?`<td>${pct(o.pa,0)}</td>`:""}${seat?`<td class="seats">${seatChips(cfg,C,seat[o.id])}</td>`:""}</tr>`;}).join("")}
   </tbody></table></div>
   ${rows.length>12?`<button class="more" id="more" type="button">${STATE.showAll?"Mostrar menos":`Mostrar los ${rows.length}`}</button>`:""}`;
 }
+
+const seatChips = (cfg,C,v) => !v ? "—" : C.map((n,i)=>[n,v[i]]).filter(x=>x[1]>0).sort((x,y)=>y[1]-x[1])
+  .map(([n,k])=>`<span class="schip" style="--c:${cfg.colors[n]}">${esc(n)} ${k}</span>`).join(" ");
 
 function unitsTable(d,cfg,C,f,order){
   const a = order[0], b = order[1], g = STATE.geo[mapId(d)], s = mapState(d, STATE.idx[STATE.eid]), NC = C.length;
@@ -487,6 +491,7 @@ function outcome(cfg,C,f,d){
       ${d.truth&&d.truth.ev?`<div class="note">Resultado real: Trump 312, Harris 226.</div>`:""}
       <div class="note">${esc(cfg.note||"")}</div></div>`;
   }
+  if (cfg.rule_kind === "seats") return seatsView(cfg,C,r,d);
   if (cfg.rule_kind === "runoff") {
     const w = Object.entries(r.ganador||{}).sort((a,b)=>b[1]-a[1]);
     return `<div class="outcome"><h2>¿Quién gana?</h2>
@@ -500,6 +505,24 @@ function outcome(cfg,C,f,d){
   return `<div class="outcome"><h2>¿Hay balotaje?</h2>
     ${pb!=null?`<div class="big">${pct(pb,0)} <span style="font-size:1rem;font-weight:500">de probabilidad de segunda vuelta</span></div>`:""}
     ${res.map(([k,p])=>`<div class="line"><span>${esc(k)}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+    ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
+    <div class="note">${esc(cfg.note||"")}</div></div>`;
+}
+
+// Parlamento por circunscripciones (España): escaños por lista y probabilidad de cada bloque de llegar a la mayoría
+function seatsView(cfg,C,r,d){
+  const ra = cfg.rule_args || {}, tot = cfg.seats_total || 350, maj = ra.majority || Math.floor(tot/2)+1;
+  const S = C.map(n => ({n, v:r["esc_"+n]})).filter(o => o.v && o.v.hi > 0).sort((a,b) => b.v.mid-a.v.mid);
+  const lab = ra.bloc_labels || {};
+  const blocs = Object.keys(ra.blocs || {}).map(k => [lab[k] || k, r["may_"+k]]).filter(x => typeof x[1] === "number");
+  const first = Object.entries(r.primero||{}).sort((a,b)=>b[1]-a[1]);
+  return `<div class="outcome"><h2>Congreso proyectado</h2>
+    <div class="big">${S.slice(0,4).map(o=>`<span style="color:${cfg.colors[o.n]}">${esc(o.n)} ${Math.round(o.v.mid)}</span>`).join(" · ")}</div>
+    <div class="ev" role="img" aria-label="Escaños proyectados">${S.map(o=>`<div style="width:${o.v.mid/tot*100}%;background:${cfg.colors[o.n]}" title="${esc(o.n)} ${Math.round(o.v.mid)}"></div>`).join("")}<span class="half" style="left:${maj/tot*100}%"></span></div>
+    <div class="note" style="margin-top:0">La línea marca ${maj} escaños, la mayoría absoluta. Mediana de las simulaciones.</div>
+    ${S.map(o=>`<div class="line"><span><span class="sw" style="background:${cfg.colors[o.n]}"></span>${esc(o.n)}</span><span><strong>${Math.round(o.v.mid)}</strong> <span style="color:var(--muted)">(${Math.round(o.v.lo)} a ${Math.round(o.v.hi)})</span></span></div>`).join("")}
+    ${blocs.length?`<h3 class="sub2">¿Quién suma ${maj}?</h3>`+blocs.map(([l,p])=>`<div class="line"><span>${esc(l)}</span><strong>${pct(p,0)}</strong></div>`).join(""):""}
+    ${first.length?`<div class="line"><span>Primera fuerza en escaños: ${esc(first[0][0])}</span><strong>${pct(first[0][1],0)}</strong></div>`:""}
     ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
     <div class="note">${esc(cfg.note||"")}</div></div>`;
 }
@@ -693,7 +716,7 @@ function methodViewOther(d){
   <div class="tablewrap"><table><thead><tr><th>Método</th>${show.map(k=>`<th>${Math.round(bt.cuts[k]*100)}%</th>`).join("")}<th>Escenario correcto</th></tr></thead><tbody>
   ${bt.methods.map(m=>`<tr><td>${names[m]}</td>${show.map((k,j)=>{const v=bt.mae[m][k];return `<td class="${m!=="crudo"&&Math.abs(v-best[j])<1e-9?"best":""}">${v.toFixed(2).replace(".",",")}</td>`;}).join("")}<td>${ok(m)}</td></tr>`).join("")}
   </tbody></table></div>
-  <p>"Escenario correcto" es la proporción de cortes en que el método anticipaba bien ${(d.config||{}).rule_kind==="runoff"?"al ganador":"si había o no segunda vuelta"}. Con la calibración traída de Estados Unidos, el intervalo del 90% contuvo el margen real el ${pct(bt.coverage_global,0)} de las veces. Para la noche electoral, este país usa un promedio de esa calibración y la que surge de su propio backtest.</p>`;
+  <p>"Escenario correcto" es la proporción de cortes en que el método anticipaba bien ${{runoff:"al ganador", seats:"la primera fuerza en escaños y qué bloques llegaban a la mayoría"}[(d.config||{}).rule_kind] || "si había o no segunda vuelta"}. Con la calibración traída de Estados Unidos, el intervalo del 90% contuvo el margen real el ${pct(bt.coverage_global,0)} de las veces. Para la noche electoral, este país usa un promedio de esa calibración y la que surge de su propio backtest.</p>`;
 }
 
 /* ---------------- sin datos / país nuevo */
