@@ -73,8 +73,9 @@ def from_tse(path, turno=1):
     piv["CD_MUNICIPIO"] = piv["CD_MUNICIPIO"].str.lstrip("0")
     xw["codigo_tse"] = xw["codigo_tse"].str.lstrip("0")
     piv = piv.merge(xw[["codigo_tse", "codigo_ibge"]], left_on="CD_MUNICIPIO", right_on="codigo_tse", how="left")
-    piv = piv.merge(geo[["codigo_ibge", "latitude", "longitude"]], on="codigo_ibge", how="left")
+    piv = piv.merge(geo[["codigo_ibge", "nome", "latitude", "longitude"]], on="codigo_ibge", how="left")
     return pd.DataFrame({"unit": piv["codigo_ibge"].fillna("tse" + piv["CD_MUNICIPIO"]), "region": piv["SG_UF"],
+                         "name": piv["nome"].fillna(piv["CD_MUNICIPIO"]),
                          "lat": piv["latitude"], "lon": piv["longitude"],
                          "lula": piv.get("lula", 0), "bolsonaro": piv.get("bolsonaro", 0), "otros": piv.get("otros", 0)})
 
@@ -103,8 +104,9 @@ def base_2t(primera_vuelta_csv, salida=DATA / "br_base_2t.csv"):
         print(f"aviso: sólo {len(b)} de {len(cur)} municipios cruzaron con br_base.csv")
     if (cur["frac"] < 0.999).any():
         print(f"aviso: {(cur['frac'] < 0.999).sum()} municipios no estaban escrutados al 100%")
-    out = pd.DataFrame({"unit": b.unit, "region": b.region, "lat": b.lat, "lon": b.lon,
-                        "lula": b["Lula"], "bolsonaro": b["Flávio Bolsonaro"]})
+    nomes = pd.read_csv(DATA / "br_municipios.csv", dtype={"codigo_ibge": str}).set_index("codigo_ibge")["nome"]
+    out = pd.DataFrame({"unit": b.unit, "region": b.region, "name": b.unit.map(nomes).fillna(b.unit),
+                        "lat": b.lat, "lon": b.lon, "lula": b["Lula"], "bolsonaro": b["Flávio Bolsonaro"]})
     out.to_csv(salida, index=False)
     print(f"{len(out)} municipios → {salida} (Lula {out.lula.sum():,.0f}, Flávio {out.bolsonaro.sum():,.0f})")
 
