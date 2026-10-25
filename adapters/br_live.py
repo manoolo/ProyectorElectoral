@@ -28,18 +28,22 @@ UFS = ["ac", "al", "am", "ap", "ba", "ce", "df", "es", "go", "ma", "mg", "ms", "
 
 
 class Cliente:
-    def __init__(self, por_segundo=50):
+    def __init__(self, por_segundo=15):
         self.ps, self.marcas, self.lock = por_segundo, deque(), threading.Lock()
+        self.pausa = 0.0                     # tras un 429 frenan todos los hilos, no sólo el que lo recibió
 
     def _esperar(self):
         while True:
             with self.lock:
                 now = time.monotonic()
-                while self.marcas and now - self.marcas[0] >= 1:
-                    self.marcas.popleft()
-                if len(self.marcas) < self.ps:
-                    self.marcas.append(now); return
-                wait = 1 - (now - self.marcas[0])
+                if now < self.pausa:
+                    wait = self.pausa - now
+                else:
+                    while self.marcas and now - self.marcas[0] >= 1:
+                        self.marcas.popleft()
+                    if len(self.marcas) < self.ps:
+                        self.marcas.append(now); return
+                    wait = 1 - (now - self.marcas[0])
             time.sleep(max(wait, 0.005))
 
     def json(self, path, opcional=False):
@@ -47,13 +51,19 @@ class Cliente:
         for intento in range(5):
             self._esperar()
             try:
-                req = urllib.request.Request(f"{BASE}/{path}", headers={"User-Agent": "proyector-electoral/1.0"})
+                req = urllib.request.Request(f"{BASE}/{path}", headers={"User-Agent": "proyector-electoral/1.0", "Cache-Control": "no-cache"})
                 with urllib.request.urlopen(req, timeout=30) as r:
                     return json.loads(r.read())
             except urllib.error.HTTPError as e:
                 if e.code == 404 and opcional:
                     return None
-                if e.code in (403, 429, 500, 502, 503) and intento < 4:
+                if e.code == 429 and intento < 4:
+                    ra = e.headers.get("Retry-After", "")
+                    with self.lock:
+                        self.pausa = max(self.pausa, time.monotonic() + (float(ra) if ra.isdigit() else 30.0))
+                    continue
+                # el CDN del TSE a veces contesta 304 sin que se haya pedido condicional
+                if e.code in (304, 403, 500, 502, 503) and intento < 4:
                     time.sleep(espera); espera *= 2; continue
                 raise
             except (urllib.error.URLError, TimeoutError):
@@ -116,10 +126,18 @@ def main():
     mus = municipios(cli, ciclo, pleito, [u.lower() for u in (a.uf or UFS)])
     # sonda: antes de pedir 5.570 archivos, uno solo. Si todavía no existe (el escrutinio no
     # arrancó), se corta acá: muchos 404 seguidos hacen que el TSE bloquee la IP 10 minutos.
-    if mus and resultado(cli, ciclo, eleicao, *mus[0]) is None:
+    # los municipios ya escrutados al 100% no cambian: se guardan y no se vuelven a pedir
+    cache = ROOT / "data" / f"br_cerrados_{eleicao}.json"
+    cerr = {k: tuple(v) for k, v in json.loads(cache.read_text()).items()} if cache.exists() else {}
+    pend = [m for m in mus if f"{m[0]}{m[1]}" not in cerr]
+    if not cerr and pend and resultado(cli, ciclo, eleicao, *pend[0]) is None:
         raise SystemExit("todavía no hay resultados publicados; reintento en la próxima vuelta")
-    with ThreadPoolExecutor(16) as ex:
-        res = [r for r in ex.map(lambda m: resultado(cli, ciclo, eleicao, *m), mus) if r]
+    with ThreadPoolExecutor(4) as ex:
+        nuevos = [r for r in ex.map(lambda m: resultado(cli, ciclo, eleicao, *m), pend) if r]
+    cerr.update({f"{r[0]}{r[1]}": r for r in nuevos if r[2] >= 1})
+    cache.write_text(json.dumps(cerr))
+    res = [cerr[f"{m[0]}{m[1]}"] for m in mus if f"{m[0]}{m[1]}" in cerr] + [r for r in nuevos if r[2] < 1]
+    print(f"  {len(pend)} pedidos ({len(mus) - len(pend)} municipios ya cerrados)")
     xw = pd.read_csv(ROOT / "data" / "br_tse_ibge.csv", dtype=str)
     tse2ibge = dict(zip(xw.codigo_tse.str.lstrip("0"), xw.codigo_ibge))
     cands = list(cfg["candidates"])
