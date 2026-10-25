@@ -5,6 +5,8 @@ const STATE = {reg:null, paises:[], eid:null, data:{}, idx:{}, playing:null, sor
                mode:"conteo", region:null, uq:"", usort:"votes", geo:{}, det:{}, cache:{}};
 const $ = s => document.querySelector(s);
 const pct = (x,d=1) => (x*100).toFixed(d).replace(".",",")+"%";
+// con 600 simulaciones no se distingue 99,5% de 100%: nunca se muestra certeza
+const prob = x => x > .99 ? ">99%" : x < .01 ? "<1%" : pct(x,0);
 const pts = (x,d=1) => (x>=0?"+":"−")+Math.abs(x*100).toFixed(d).replace(".",",");
 const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const num = n => Math.round(n).toLocaleString("es-AR");
@@ -198,7 +200,7 @@ function board(cfg,C,f,d,order){
       <div class="stack" role="img" aria-label="Reparto proyectado del voto">${stack}${mid?`<span class="mid"></span>`:""}</div>
       <div class="stackcap"><span>Proyección del total</span>${mid?`<span>50%</span>`:""}</div>
       <div class="others">${rows}</div>
-      ${mg ? `<p class="mline">Diferencia proyectada: ${esc(mg.a)} ${pts(mg.mid)} pts sobre ${esc(mg.b)} (${pts(mg.lo)} a ${pts(mg.hi)}). Probabilidad de que ${esc(mg.a)} termine adelante: ${pct(mg.p_a_ahead,0)}.</p>`:""}</div>
+      ${mg ? `<p class="mline">Diferencia proyectada: ${esc(mg.a)} ${pts(mg.mid)} pts sobre ${esc(mg.b)} (${pts(mg.lo)} a ${pts(mg.hi)}). Probabilidad de que ${esc(mg.a)} termine adelante: ${prob(mg.p_a_ahead)}.</p>`:""}</div>
     ${outcome(cfg,C,f,d)}`;
 }
 
@@ -431,7 +433,7 @@ function regionsView(d,cfg,C,f,order){
     return `<tr><td>${drill?`<button class="lnk" type="button" data-r="${esc(o.id)}">${esc(o.name)}</button>`:esc(o.name)}</td><td>${pct(o.cnt,0)}</td><td>${pct(o.p[a])}</td><td>${pct(o.p[b])}</td>
     <td>${pts(dm)}<span class="mbar"><span style="${dm>=0?`left:50%;width:${w}%;background:${ca}`:`right:50%;width:${w}%;background:${cb}`}"></span></span></td>
     ${hasPrev?(()=>{ const bm = pm(o.id); return bm==null?`<td></td><td></td>`:`<td>${pts(bm)}</td><td style="color:${dm-bm>=0?ca:cb};font-weight:700">${pts(dm-bm)}</td>`; })():""}
-    ${o.pa!=null?`<td>${pct(o.pa,0)}</td>`:""}${seat?`<td class="seats">${seatChips(cfg,C,seat[o.id])}</td>`:""}</tr>`;}).join("")}
+    ${o.pa!=null?`<td>${prob(o.pa)}</td>`:""}${seat?`<td class="seats">${seatChips(cfg,C,seat[o.id])}</td>`:""}</tr>`;}).join("")}
   </tbody></table></div>
   ${rows.length>12?`<button class="more" id="more" type="button">${STATE.showAll?"Mostrar menos":`Mostrar los ${rows.length}`}</button>`:""}`;
 }
@@ -487,7 +489,7 @@ function outcome(cfg,C,f,d){
       <div class="ev" role="img" aria-label="Votos electorales proyectados">${evs.map(o=>`<div style="width:${o.v.mid/tot*100}%;background:${cfg.colors[o.n]}"></div>`).join("")}<span class="half"></span></div>
       <div class="note" style="margin-top:0">La línea marca 270, la mayoría.</div>
       ${evs.map(o=>`<div class="line"><span>${esc(o.n)}</span><span>${Math.round(o.v.lo)}–${Math.round(o.v.hi)} votos electorales</span></div>`).join("")}
-      ${winners.map(([n,p])=>`<div class="line"><span>${n==="sin mayoría"?"Nadie llega a 270":"Gana "+esc(n)}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+      ${winners.map(([n,p])=>`<div class="line"><span>${n==="sin mayoría"?"Nadie llega a 270":"Gana "+esc(n)}</span><strong>${prob(p)}</strong></div>`).join("")}
       ${d.truth&&d.truth.ev?`<div class="note">Resultado real: Trump 312, Harris 226.</div>`:""}
       <div class="note">${esc(cfg.note||"")}</div></div>`;
   }
@@ -495,16 +497,16 @@ function outcome(cfg,C,f,d){
   if (cfg.rule_kind === "runoff") {
     const w = Object.entries(r.ganador||{}).sort((a,b)=>b[1]-a[1]);
     return `<div class="outcome"><h2>¿Quién gana?</h2>
-      ${w.length?`<div class="big"><span style="color:${cfg.colors[w[0][0]]||"inherit"}">${esc(w[0][0])}</span> ${pct(w[0][1],0)}</div>`:""}
-      ${w.map(([k,p])=>`<div class="line"><span>Gana ${esc(k)}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+      ${w.length?`<div class="big"><span style="color:${cfg.colors[w[0][0]]||"inherit"}">${esc(w[0][0])}</span> ${prob(w[0][1])}</div>`:""}
+      ${w.map(([k,p])=>`<div class="line"><span>Gana ${esc(k)}</span><strong>${prob(p)}</strong></div>`).join("")}
       ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
       <div class="note">${esc(cfg.note||"")}</div></div>`;
   }
   const res = Object.entries(r.resultado||{}).sort((a,b)=>b[1]-a[1]);
   const pb = typeof r.balotaje === "number" ? r.balotaje : null;
   return `<div class="outcome"><h2>¿Hay balotaje?</h2>
-    ${pb!=null?`<div class="big">${pct(pb,0)} <span style="font-size:1rem;font-weight:500">de probabilidad de segunda vuelta</span></div>`:""}
-    ${res.map(([k,p])=>`<div class="line"><span>${esc(k)}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+    ${pb!=null?`<div class="big">${prob(pb)} <span style="font-size:1rem;font-weight:500">de probabilidad de segunda vuelta</span></div>`:""}
+    ${res.map(([k,p])=>`<div class="line"><span>${esc(k)}</span><strong>${prob(p)}</strong></div>`).join("")}
     ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
     <div class="note">${esc(cfg.note||"")}</div></div>`;
 }
@@ -521,8 +523,8 @@ function seatsView(cfg,C,r,d){
     <div class="ev" role="img" aria-label="Escaños proyectados">${S.map(o=>`<div style="width:${o.v.mid/tot*100}%;background:${cfg.colors[o.n]}" title="${esc(o.n)} ${Math.round(o.v.mid)}"></div>`).join("")}<span class="half" style="left:${maj/tot*100}%"></span></div>
     <div class="note" style="margin-top:0">La línea marca ${maj} escaños, la mayoría absoluta. Mediana de las simulaciones.</div>
     ${S.map(o=>`<div class="line"><span><span class="sw" style="background:${cfg.colors[o.n]}"></span>${esc(o.n)}</span><span><strong>${Math.round(o.v.mid)}</strong> <span style="color:var(--muted)">(${Math.round(o.v.lo)} a ${Math.round(o.v.hi)})</span></span></div>`).join("")}
-    ${blocs.length?`<h3 class="sub2">¿Quién suma ${maj}?</h3>`+blocs.map(([l,p])=>`<div class="line"><span>${esc(l)}</span><strong>${pct(p,0)}</strong></div>`).join(""):""}
-    ${first.length?`<div class="line"><span>Primera fuerza en escaños: ${esc(first[0][0])}</span><strong>${pct(first[0][1],0)}</strong></div>`:""}
+    ${blocs.length?`<h3 class="sub2">¿Quién suma ${maj}?</h3>`+blocs.map(([l,p])=>`<div class="line"><span>${esc(l)}</span><strong>${prob(p)}</strong></div>`).join(""):""}
+    ${first.length?`<div class="line"><span>Primera fuerza en escaños: ${esc(first[0][0])}</span><strong>${prob(first[0][1])}</strong></div>`:""}
     ${d.truth&&d.truth.text?`<div class="note">${esc(d.truth.text)}</div>`:""}
     <div class="note">${esc(cfg.note||"")}</div></div>`;
 }
@@ -566,7 +568,7 @@ function senateBoard(cfg,C,f,d){
   const ctl = r && r.control ? Object.entries(r.control).sort((a,b)=>b[1]-a[1]) : [];
   const col = n => n === D ? cD : n === R ? cR : "var(--ink)";
   const iv = k => r && r[k] ? `${Math.round(r[k].lo)}–${Math.round(r[k].hi)}` : "";
-  const ga = r && typeof r.balotaje_GA === "number" && r.balotaje_GA > .02 ? `<div class="line"><span>Georgia va a segunda vuelta (nadie pasa el 50%)</span><strong>${pct(r.balotaje_GA,0)}</strong></div>` : "";
+  const ga = r && typeof r.balotaje_GA === "number" && r.balotaje_GA > .02 ? `<div class="line"><span>Georgia va a segunda vuelta (nadie pasa el 50%)</span><strong>${prob(r.balotaje_GA)}</strong></div>` : "";
   const truth = d.truth && d.truth.text ? `<div class="note">${esc(d.truth.text)}</div>` : "";
   return `<div><div class="tops"><div class="top1"><div class="nm">Demócratas</div><div class="pc" style="color:${cD}">${sd}</div><div class="ci">${r?`${iv("bancas_"+D)} bancas`:"bancas"}</div></div>
       ${si?`<div class="top1" style="text-align:center"><div class="nm">Osborn</div><div class="pc" style="color:${cI}">${si}</div><div class="ci">independiente</div></div>`:""}
@@ -575,8 +577,8 @@ function senateBoard(cfg,C,f,d){
       <div class="stackcap"><span>${fd} no se renuevan</span><span>50</span><span>${fr} no se renuevan</span></div>
       <p class="mline">Los tonos claros son las ${S.total - fd - fr} bancas en juego, asignadas al favorito de cada carrera; el número grande es esa cuenta y debajo va el rango del 90% de las simulaciones. ${esc(S.desempate)} ${S.desempate===R?"necesitan 50 (desempata el vicepresidente)":"necesitan 50 (desempata la vicepresidenta)"}; ${S.desempate===R?D:R}, 51.</p></div>
     <div class="outcome"><h2>Control del Senado</h2>
-      ${ctl.length?`<div class="big"><span style="color:${col(ctl[0][0])}">${esc(ctl[0][0])}</span> ${pct(ctl[0][1],0)}</div>`:`<p class="note">Todavía hay muy pocos condados escrutados para simular escenarios.</p>`}
-      ${ctl.map(([k,p])=>`<div class="line"><span>${k.startsWith("Depende")||k.startsWith("Sin")?esc(k):"Controlan los "+esc(k.toLowerCase())}</span><strong>${pct(p,0)}</strong></div>`).join("")}
+      ${ctl.length?`<div class="big"><span style="color:${col(ctl[0][0])}">${esc(ctl[0][0])}</span> ${prob(ctl[0][1])}</div>`:`<p class="note">Todavía hay muy pocos condados escrutados para simular escenarios.</p>`}
+      ${ctl.map(([k,p])=>`<div class="line"><span>${k.startsWith("Depende")||k.startsWith("Sin")?esc(k):"Controlan los "+esc(k.toLowerCase())}</span><strong>${prob(p)}</strong></div>`).join("")}
       ${ga}${truth}<div class="note">${esc(cfg.note||"")}</div></div>`;
 }
 function racesView(d,cfg,f){
@@ -600,8 +602,8 @@ function racesView(d,cfg,f){
     return `<div class="race"><div class="rh"><button class="lnk" type="button" data-r="${esc(r.reg)}">${esc(regName(g, r.reg.split("-")[0]))}${r.reg.endsWith("-E")?" (especial)":""}</button>${ratingChip(cfg, r.reg)}${res}</div>
       <div class="rc"><span style="color:${cD}">${dn}</span><span style="color:${cR}">${rn}</span></div>
       ${pD==null?`<div class="pbar"><div style="width:100%;background:var(--nodata)"></div></div><div class="rs"><span>Sin simulaciones todavía</span></div>`:
-      `<div class="pbar" role="img" aria-label="Probabilidad de ganar: ${dn} ${pct(pD,0)}, ${rn} ${pct(1-pD,0)}"><div style="width:${pD*100}%;background:${cD}"></div><div style="width:${(1-pD)*100}%;background:${cR}"></div><span class="mid"></span></div>
-      <div class="rs"><span><strong style="color:${cD}">${pct(pD,0)}</strong></span><span>${d.mode==="previa"?"margen esperado":"margen proyectado"} ${r.m>=0?`D ${pts(r.m)}`:`R ${pts(-r.m)}`}${d.mode!=="previa"?` · ${pct(r.cnt,0)} escrutado`:""}</span><span><strong style="color:${cR}">${pct(1-pD,0)}</strong></span></div>`}</div>`; };
+      `<div class="pbar" role="img" aria-label="Probabilidad de ganar: ${dn} ${prob(pD)}, ${rn} ${prob(1-pD)}"><div style="width:${pD*100}%;background:${cD}"></div><div style="width:${(1-pD)*100}%;background:${cR}"></div><span class="mid"></span></div>
+      <div class="rs"><span><strong style="color:${cD}">${prob(pD)}</strong></span><span>${d.mode==="previa"?"margen esperado":"margen proyectado"} ${r.m>=0?`D ${pts(r.m)}`:`R ${pts(-r.m)}`}${d.mode!=="previa"?` · ${pct(r.cnt,0)} escrutado`:""}</span><span><strong style="color:${cR}">${prob(1-pD)}</strong></span></div>`}</div>`; };
   return `<h2 class="sec">Las carreras que deciden el Senado</h2>
     <p class="secdek">Probabilidad de ganar de cada candidato${d.mode==="previa"?" según la calificación de Cook":", según el escrutinio y, donde todavía se contó poco, la calificación de Cook"}. Primero las más parejas. La etiqueta es la calificación de ${esc(cfg.ratings_source||"Cook Political Report")}.</p>
     <div class="races">${shown.map(row).join("")}</div>
